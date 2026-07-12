@@ -38,11 +38,22 @@ Anthropic API key are stored locally and encrypted at rest with the OS keystore 
 
 ---
 
-## Prerequisites
+## Download & install (Windows)
+
+Grab the latest **`FirstMate-<version>-setup.exe`** from the
+[**Releases page**](https://github.com/EzekielTheMad/FirstMate/releases), run it, and follow the
+installer (it adds Start-menu and desktop shortcuts). Then launch FirstMate and click
+**Log in with EVE** — no account setup needed.
+
+> The installer is not code-signed, so Windows SmartScreen may show a "Windows protected your PC"
+> prompt on first run — click **More info → Run anyway**. (Code signing requires a paid
+> certificate; it can be added later.)
+
+## Prerequisites (running from source)
 
 - **Node.js 20+**
-- An **EVE developer application** (free) — see below
 - (Optional) an **Anthropic API key** for the AI Advisor
+- The app ships with a built-in EVE Client ID, so no EVE developer account is required
 
 ## Setup
 
@@ -118,7 +129,25 @@ src/
 | `npm run dev` | Launch with hot reload |
 | `npm run build` | Type-bundle all three processes into `out/` |
 | `npm run typecheck` | Type-check main+preload and renderer |
-| `npm run package` | Build a Windows NSIS installer |
+| `npm run package` | Build a Windows NSIS installer locally (`dist/`) |
+
+## Releasing
+
+Installers are built by GitHub Actions on a Windows runner and published to a GitHub Release —
+you don't need Windows locally. To cut a release:
+
+```bash
+# bump the version in package.json first, then:
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The `.github/workflows/release.yml` workflow builds the installer and attaches
+`FirstMate-<version>-setup.exe` to a Release for that tag. You can also run the workflow manually
+from the **Actions** tab (it uploads the installer as a build artifact without publishing a
+release).
+
+Building locally on Windows instead: `npm run package` → `dist/`.
 
 ## Notes & limitations
 

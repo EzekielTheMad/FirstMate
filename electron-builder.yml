@@ -6,6 +6,11 @@ directories:
 files:
   - out/**/*
   - package.json
+publish:
+  provider: github
+  owner: EzekielTheMad
+  repo: FirstMate
+  releaseType: release
 win:
   target:
     - target: nsis
