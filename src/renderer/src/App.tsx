@@ -4,8 +4,11 @@ import { useUpdates } from './lib/hooks'
 import { Dashboard } from './views/Dashboard'
 import { Exploration } from './views/Exploration'
 import { Economy } from './views/Economy'
+import { Materials } from './views/Materials'
 import { Mining } from './views/Mining'
+import { Industry } from './views/Industry'
 import { Combat } from './views/Combat'
+import { Clones } from './views/Clones'
 import { Advisor } from './views/Advisor'
 import { Settings } from './views/Settings'
 import { Loader, EmptyState, ErrorBox } from './components/ui'
@@ -16,8 +19,11 @@ type TabId =
   | 'dashboard'
   | 'exploration'
   | 'economy'
+  | 'materials'
   | 'mining'
+  | 'industry'
   | 'combat'
+  | 'clones'
   | 'advisor'
   | 'settings'
 
@@ -33,8 +39,11 @@ const TABS: Tab[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '🛰', needsAuth: true },
   { id: 'exploration', label: 'Explore', icon: '🌀' },
   { id: 'economy', label: 'Economy', icon: '💰', needsAuth: true },
+  { id: 'materials', label: 'Assets', icon: '📦', needsAuth: true },
   { id: 'mining', label: 'Mining', icon: '⛏', needsAuth: true },
+  { id: 'industry', label: 'Industry', icon: '🏭', needsAuth: true },
   { id: 'combat', label: 'Combat', icon: '🎯' },
+  { id: 'clones', label: 'Clones', icon: '🧬', needsAuth: true },
   { id: 'advisor', label: 'Advisor', icon: '✨' },
   { id: 'settings', label: 'Settings', icon: '⚙' }
 ]
@@ -203,10 +212,16 @@ function TabContent({
       return <Exploration />
     case 'economy':
       return <Economy autoRefreshMs={autoRefreshMs} />
+    case 'materials':
+      return <Materials autoRefreshMs={autoRefreshMs} />
     case 'mining':
       return <Mining />
+    case 'industry':
+      return <Industry autoRefreshMs={autoRefreshMs} />
     case 'combat':
       return <Combat />
+    case 'clones':
+      return <Clones />
     case 'advisor':
       return <Advisor hasKey={settings?.hasAnthropicKey ?? false} />
     case 'settings':
