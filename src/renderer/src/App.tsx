@@ -1,0 +1,187 @@
+import { useEffect, useState } from 'react'
+import type { AuthState, PublicSettings } from '@shared/types'
+import { Dashboard } from './views/Dashboard'
+import { Exploration } from './views/Exploration'
+import { Economy } from './views/Economy'
+import { Mining } from './views/Mining'
+import { Combat } from './views/Combat'
+import { Advisor } from './views/Advisor'
+import { Settings } from './views/Settings'
+import { Loader, EmptyState, ErrorBox } from './components/ui'
+
+type TabId =
+  | 'dashboard'
+  | 'exploration'
+  | 'economy'
+  | 'mining'
+  | 'combat'
+  | 'advisor'
+  | 'settings'
+
+interface Tab {
+  id: TabId
+  label: string
+  icon: string
+  /** Requires an authenticated character. */
+  needsAuth?: boolean
+}
+
+const TABS: Tab[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: '🛰', needsAuth: true },
+  { id: 'exploration', label: 'Explore', icon: '🌀' },
+  { id: 'economy', label: 'Economy', icon: '💰', needsAuth: true },
+  { id: 'mining', label: 'Mining', icon: '⛏', needsAuth: true },
+  { id: 'combat', label: 'Combat', icon: '🎯' },
+  { id: 'advisor', label: 'Advisor', icon: '✨' },
+  { id: 'settings', label: 'Settings', icon: '⚙' }
+]
+
+export function App(): JSX.Element {
+  const [auth, setAuth] = useState<AuthState>({ status: 'logged-out' })
+  const [settings, setSettings] = useState<PublicSettings | null>(null)
+  const [tab, setTab] = useState<TabId>('dashboard')
+
+  useEffect(() => {
+    window.firstmate.settings.get().then(setSettings)
+    window.firstmate.auth.getState().then(setAuth)
+    const off = window.firstmate.auth.onChange(setAuth)
+    return off
+  }, [])
+
+  async function login(): Promise<void> {
+    setAuth({ status: 'logging-in' })
+    const state = await window.firstmate.auth.login()
+    setAuth(state)
+  }
+
+  async function logout(): Promise<void> {
+    const state = await window.firstmate.auth.logout()
+    setAuth(state)
+  }
+
+  const identity = auth.identity
+  const active = TABS.find((t) => t.id === tab) ?? TABS[0]
+
+  return (
+    <div className="app">
+      <div className="topbar">
+        <div className="brand">
+          <span className="mark">FM</span>
+          <span>FirstMate</span>
+        </div>
+        <div className="spacer" />
+        {identity ? (
+          <div className="who">
+            {identity.portrait && <img src={identity.portrait} alt="" />}
+            <div className="meta">
+              <div className="name">{identity.characterName}</div>
+              <button
+                className="status"
+                onClick={logout}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-faint)',
+                  cursor: 'pointer',
+                  padding: 0
+                }}
+              >
+                Log out
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            className="btn primary sm"
+            onClick={login}
+            disabled={auth.status === 'logging-in'}
+          >
+            {auth.status === 'logging-in' ? 'Logging in…' : 'Log in with EVE'}
+          </button>
+        )}
+      </div>
+
+      <div className="tabbar">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            className={t.id === tab ? 'active' : ''}
+            onClick={() => setTab(t.id)}
+          >
+            <span className="ico">{t.icon}</span>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="content">
+        <TabContent
+          tab={active}
+          auth={auth}
+          settings={settings}
+          onLogin={login}
+          onSettingsSaved={setSettings}
+        />
+      </div>
+    </div>
+  )
+}
+
+function TabContent({
+  tab,
+  auth,
+  settings,
+  onLogin,
+  onSettingsSaved
+}: {
+  tab: Tab
+  auth: AuthState
+  settings: PublicSettings | null
+  onLogin: () => void
+  onSettingsSaved: (s: PublicSettings) => void
+}): JSX.Element {
+  if (tab.needsAuth && auth.status !== 'logged-in') {
+    if (auth.status === 'logging-in') return <Loader label="Waiting for EVE SSO…" />
+    return (
+      <EmptyState title="Not connected">
+        {settings && !settings.ssoClientId ? (
+          <>
+            Add your EVE application Client ID in <strong>Settings</strong> first, then log in.
+          </>
+        ) : (
+          <div style={{ marginTop: 12 }}>
+            {auth.status === 'error' && auth.error && (
+              <ErrorBox message={auth.error} />
+            )}
+            <button className="btn primary" onClick={onLogin}>
+              Log in with EVE
+            </button>
+          </div>
+        )}
+      </EmptyState>
+    )
+  }
+
+  switch (tab.id) {
+    case 'dashboard':
+      return <Dashboard />
+    case 'exploration':
+      return <Exploration />
+    case 'economy':
+      return <Economy />
+    case 'mining':
+      return <Mining />
+    case 'combat':
+      return <Combat />
+    case 'advisor':
+      return <Advisor hasKey={settings?.hasAnthropicKey ?? false} />
+    case 'settings':
+      return settings ? (
+        <Settings settings={settings} onSaved={onSettingsSaved} />
+      ) : (
+        <Loader />
+      )
+    default:
+      return <Dashboard />
+  }
+}
