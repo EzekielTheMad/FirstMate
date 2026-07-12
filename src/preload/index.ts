@@ -38,7 +38,10 @@ const api: FirstMateApi = {
     save: (snapshot: CombatSnapshot) => ipcRenderer.invoke('combat:save', snapshot)
   },
   advisor: {
-    ask: (goal: AdvisorGoal) => ipcRenderer.invoke('advisor:ask', goal)
+    ask: (goal: AdvisorGoal) => ipcRenderer.invoke('advisor:ask', goal),
+    getHistory: () => ipcRenderer.invoke('advisor:getHistory'),
+    deleteHistory: (id: string) => ipcRenderer.invoke('advisor:deleteHistory', id),
+    clearHistory: () => ipcRenderer.invoke('advisor:clearHistory')
   },
   updates: {
     getState: () => ipcRenderer.invoke('updates:getState'),
@@ -52,7 +55,8 @@ const api: FirstMateApi = {
     }
   },
   window: {
-    setCompact: (compact: boolean) => ipcRenderer.invoke('window:setCompact', compact)
+    setCompact: (compact: boolean) => ipcRenderer.invoke('window:setCompact', compact),
+    setZoom: (factor: number) => ipcRenderer.invoke('window:setZoom', factor)
   }
 }
 

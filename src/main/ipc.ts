@@ -14,7 +14,10 @@ import {
   getExploration,
   saveExploration,
   getCombat,
-  saveCombat
+  saveCombat,
+  getAdvisorHistory,
+  deleteAdvisorHistory,
+  clearAdvisorHistory
 } from './store'
 import { login, logout, getAuthState, onAuthChange } from './auth/sso'
 import { fetchDashboard, fetchEconomy, fetchMining } from './esi/client'
@@ -63,6 +66,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   // Advisor
   ipcMain.handle('advisor:ask', (_e, goal: AdvisorGoal) => askAdvisor(goal))
+  ipcMain.handle('advisor:getHistory', () => getAdvisorHistory())
+  ipcMain.handle('advisor:deleteHistory', (_e, id: string) => deleteAdvisorHistory(id))
+  ipcMain.handle('advisor:clearHistory', () => clearAdvisorHistory())
 
   // Updates (auth-independent)
   ipcMain.handle('updates:getState', () => getUpdateState())
@@ -78,5 +84,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   ipcMain.handle('window:setCompact', (_e, compact: boolean) => {
     const win = getWindow()
     if (win) win.setResizable(!compact ? true : true) // keep resizable; hook reserved for future
+  })
+  ipcMain.handle('window:setZoom', (_e, factor: number) => {
+    saveSettings({ zoomFactor: factor })
+    getWindow()?.webContents.setZoomFactor(factor)
   })
 }

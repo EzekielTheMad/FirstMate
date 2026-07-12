@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, appendFileSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { registerIpc } from './ipc'
 import { restoreSession, getAuthState, handleCallbackUrl } from './auth/sso'
-import { getSettings } from './store'
+import { getSettings, saveSettings } from './store'
 import { registerProtocol, findCallbackUrl } from './protocol'
 import { initUpdater } from './updater'
 
@@ -123,6 +123,30 @@ function createWindow(): void {
     logStartup(`render-process-gone: ${JSON.stringify(details)}`)
   )
   wc.on('preload-error', (_e, path, error) => logStartup(`preload-error ${path}: ${error.stack}`))
+
+  // Apply the persisted zoom once the renderer has loaded.
+  wc.on('did-finish-load', () => {
+    wc.setZoomFactor(getSettings().zoomFactor)
+  })
+
+  // Ctrl+=/Ctrl+- steps zoom by 0.1 (clamped to [0.8, 1.5]); Ctrl+0 resets to 1.0.
+  const ZOOM_MIN = 0.8
+  const ZOOM_MAX = 1.5
+  wc.on('before-input-event', (_e, input) => {
+    if (input.type !== 'keyDown' || !input.control) return
+    let next: number | undefined
+    if (input.key === '=' || input.key === '+') {
+      next = Math.min(ZOOM_MAX, Math.round((wc.getZoomFactor() + 0.1) * 10) / 10)
+    } else if (input.key === '-') {
+      next = Math.max(ZOOM_MIN, Math.round((wc.getZoomFactor() - 0.1) * 10) / 10)
+    } else if (input.key === '0') {
+      next = 1.0
+    }
+    if (next !== undefined) {
+      wc.setZoomFactor(next)
+      saveSettings({ zoomFactor: next })
+    }
+  })
 
   mainWindow.on('closed', () => {
     mainWindow = null

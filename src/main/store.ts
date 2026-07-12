@@ -6,7 +6,8 @@ import {
   DEFAULT_SETTINGS,
   PublicSettings,
   ExplorationState,
-  CombatSnapshot
+  CombatSnapshot,
+  AdvisorHistoryEntry
 } from '@shared/types'
 
 /**
@@ -29,7 +30,11 @@ function readJson<T>(name: string, fallback: T): T {
   try {
     const p = filePath(name)
     if (!existsSync(p)) return fallback
-    return { ...fallback, ...JSON.parse(readFileSync(p, 'utf-8')) }
+    const parsed = JSON.parse(readFileSync(p, 'utf-8'))
+    // Array-shaped stores (e.g. advisor history) must not be object-merged —
+    // spreading two arrays with `{...a, ...b}` yields a plain object, not an array.
+    if (Array.isArray(fallback)) return (Array.isArray(parsed) ? parsed : fallback) as T
+    return { ...fallback, ...parsed }
   } catch {
     return fallback
   }
@@ -85,7 +90,9 @@ export function getSettings(): AppSettings {
     anthropicApiKey: decryptSecret(raw.anthropicApiKeyEnc),
     advisorModel: raw.advisorModel,
     accent: raw.accent,
-    compactMode: raw.compactMode
+    compactMode: raw.compactMode,
+    zoomFactor: raw.zoomFactor ?? DEFAULT_SETTINGS.zoomFactor,
+    autoRefreshSeconds: raw.autoRefreshSeconds ?? DEFAULT_SETTINGS.autoRefreshSeconds
   }
 }
 
@@ -98,6 +105,8 @@ export function saveSettings(patch: Partial<AppSettings>): AppSettings {
     advisorModel: merged.advisorModel,
     accent: merged.accent,
     compactMode: merged.compactMode,
+    zoomFactor: merged.zoomFactor,
+    autoRefreshSeconds: merged.autoRefreshSeconds,
     anthropicApiKeyEnc: encryptSecret(merged.anthropicApiKey)
   }
   writeJson(SETTINGS_FILE, stored)
@@ -111,6 +120,8 @@ export function toPublicSettings(s: AppSettings): PublicSettings {
     advisorModel: s.advisorModel,
     accent: s.accent,
     compactMode: s.compactMode,
+    zoomFactor: s.zoomFactor,
+    autoRefreshSeconds: s.autoRefreshSeconds,
     hasAnthropicKey: Boolean(s.anthropicApiKey)
   }
 }
@@ -153,4 +164,30 @@ export function getCombat(): CombatSnapshot {
 export function saveCombat(snapshot: CombatSnapshot): CombatSnapshot {
   writeJson(COMBAT_FILE, snapshot)
   return snapshot
+}
+
+// ---- Advisor history --------------------------------------------------------
+
+const ADVISOR_HISTORY_FILE = 'advisor-history.json'
+const ADVISOR_HISTORY_LIMIT = 50
+
+export function getAdvisorHistory(): AdvisorHistoryEntry[] {
+  return readJson<AdvisorHistoryEntry[]>(ADVISOR_HISTORY_FILE, [])
+}
+
+export function addAdvisorHistory(entry: AdvisorHistoryEntry): AdvisorHistoryEntry[] {
+  const next = [entry, ...getAdvisorHistory()].slice(0, ADVISOR_HISTORY_LIMIT)
+  writeJson(ADVISOR_HISTORY_FILE, next)
+  return next
+}
+
+export function deleteAdvisorHistory(id: string): AdvisorHistoryEntry[] {
+  const next = getAdvisorHistory().filter((e) => e.id !== id)
+  writeJson(ADVISOR_HISTORY_FILE, next)
+  return next
+}
+
+export function clearAdvisorHistory(): AdvisorHistoryEntry[] {
+  writeJson(ADVISOR_HISTORY_FILE, [])
+  return []
 }

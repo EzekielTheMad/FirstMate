@@ -19,6 +19,10 @@ export interface AppSettings {
   accent: string
   /** Whether the window should be frameless/compact (portrait-monitor friendly). */
   compactMode: boolean
+  /** Renderer zoom factor (1.0 = 100%). */
+  zoomFactor: number
+  /** Auto-refresh interval in seconds for data views. 0 = off. */
+  autoRefreshSeconds: number
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -30,7 +34,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   anthropicApiKey: '',
   advisorModel: 'claude-opus-4-8',
   accent: '#38bdf8',
-  compactMode: false
+  compactMode: false,
+  zoomFactor: 1,
+  autoRefreshSeconds: 0
 }
 
 /** Redacted view of settings sent to the renderer (never exposes secrets). */
@@ -40,6 +46,8 @@ export interface PublicSettings {
   advisorModel: string
   accent: string
   compactMode: boolean
+  zoomFactor: number
+  autoRefreshSeconds: number
   /** True if an Anthropic key is stored, without revealing it. */
   hasAnthropicKey: boolean
 }
@@ -70,6 +78,12 @@ export interface EsiResult<T> {
 
 // ---- Domain shapes (subset of ESI, plus derived fields) --------------------
 
+export interface SkillQueueEntry {
+  name?: string
+  level: number
+  finishesAt?: string
+}
+
 export interface DashboardData {
   identity: CharacterIdentity
   online: boolean
@@ -93,6 +107,7 @@ export interface DashboardData {
     finishesAt?: string
     level: number
   }
+  skillQueue: SkillQueueEntry[]
 }
 
 export interface WalletJournalEntry {
@@ -200,6 +215,20 @@ export interface AdvisorResponse {
   error?: string
 }
 
+export interface AdvisorHistoryEntry {
+  id: string
+  goal: string
+  focus?: string
+  advice: string
+  createdAt: number
+  snapshot: {
+    isk: number
+    skillPoints: number
+    locationName?: string
+    shipName?: string
+  }
+}
+
 // ---- Updates ---------------------------------------------------------------
 
 export type UpdateStatus =
@@ -253,6 +282,9 @@ export interface FirstMateApi {
   }
   advisor: {
     ask: (goal: AdvisorGoal) => Promise<AdvisorResponse>
+    getHistory: () => Promise<AdvisorHistoryEntry[]>
+    deleteHistory: (id: string) => Promise<AdvisorHistoryEntry[]>
+    clearHistory: () => Promise<AdvisorHistoryEntry[]>
   }
   updates: {
     getState: () => Promise<UpdateState>
@@ -263,5 +295,6 @@ export interface FirstMateApi {
   }
   window: {
     setCompact: (compact: boolean) => Promise<void>
+    setZoom: (factor: number) => Promise<void>
   }
 }
