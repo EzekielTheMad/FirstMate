@@ -878,8 +878,11 @@ Create `build/installer.nsh`:
 ; electron-builder already replaces a same-scope per-user install; this also
 ; clears a legacy per-machine install (older builds landed in Program Files).
 !macro customInit
+  ; UNINSTALL_APP_KEY is only the GUID key name (see app-builder-lib NsisTarget.js);
+  ; the actual uninstall entry lives under the standard Uninstall path, exactly as
+  ; electron-builder's own multiUser.nsh composes it.
   ClearErrors
-  ReadRegStr $0 HKLM "${UNINSTALL_APP_KEY}" "QuietUninstallString"
+  ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTALL_APP_KEY}" "QuietUninstallString"
   ${ifNot} $0 == ""
     DetailPrint "Removing a previous FirstMate installation (per-machine)..."
     ExecWait '$0'
@@ -897,7 +900,18 @@ Then run the full installer build to validate NSIS compiles the include:
 Run: `npm run package`
 Expected: exits 0; produces `dist/FirstMate-<version>-setup.exe`. NSIS compiles `installer.nsh` without error.
 
-> If NSIS errors that `${UNINSTALL_APP_KEY}` is undefined, replace the `ReadRegStr` key with `"Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_GUID}"` and rebuild. Confirm which define exists by searching the electron-builder NSIS output for `UNINSTALL_APP_KEY`.
+> **Local-build note (this machine):** the full `npm run package` cannot run on a
+> non-admin Windows account without Developer Mode — electron-builder fails while
+> extracting `winCodeSign` (`Cannot create symbolic link: A required privilege is
+> not held`). This is pre-existing and unrelated to our change; the NSIS include is
+> compiled for real by CI on `windows-latest` at tag time. Locally, validate with
+> `npm run typecheck && npm run build` and a YAML parse of `electron-builder.yml`.
+>
+> **Registry key:** `${UNINSTALL_APP_KEY}` is only the GUID key *name*, not a full
+> path (confirmed in `app-builder-lib/out/targets/nsis/NsisTarget.js` and its own
+> `templates/nsis/multiUser.nsh`, which composes
+> `"Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTALL_APP_KEY}"`).
+> The `ReadRegStr` above uses that full path.
 
 - [ ] **Step 4: Commit**
 
