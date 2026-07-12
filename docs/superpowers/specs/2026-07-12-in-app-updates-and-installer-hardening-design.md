@@ -24,6 +24,9 @@ app; users must manually find and run a new installer.
 2. **In-app updates:** the app checks for updates on launch, and — gated on the
    user reading a changelog — can download and install a new version from within
    the app.
+3. **Auth-independent:** the entire update surface (launch check, banner, and the
+   Settings → Updates panel) works whether or not a character is logged in via
+   EVE SSO. Updating must never require authentication.
 
 ## Non-goals
 
@@ -102,6 +105,10 @@ same clean-upgrade behavior.
   (`install()` → `quitAndInstall`).
 - A `useUpdates` hook subscribes to `updates.onChange` and seeds from
   `updates.getState()` (mirrors the auth wiring in `App.tsx`).
+- **Auth-independent:** the banner renders at the app shell (outside any
+  `needsAuth` gating) and the Settings tab already has no `needsAuth` flag, so the
+  full update surface is reachable while logged out. The updater backend never
+  touches auth/ESI state.
 
 ### E. Changelog pipeline
 
