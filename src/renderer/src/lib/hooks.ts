@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { UpdateState } from '@shared/types'
 
 export interface AsyncState<T> {
   loading: boolean
@@ -43,4 +44,15 @@ export function useAsync<T>(loader: () => Promise<T>, deps: unknown[] = []): Asy
 
 export function genId(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)
+}
+
+/** Subscribe to update-state changes from the main process. */
+export function useUpdates(): UpdateState | null {
+  const [state, setState] = useState<UpdateState | null>(null)
+  useEffect(() => {
+    window.firstmate.updates.getState().then(setState)
+    const off = window.firstmate.updates.onChange(setState)
+    return off
+  }, [])
+  return state
 }
