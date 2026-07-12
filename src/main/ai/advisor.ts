@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { AdvisorGoal, AdvisorResponse } from '@shared/types'
-import { getSettings } from '../store'
+import { AdvisorGoal, AdvisorResponse, AdvisorHistoryEntry } from '@shared/types'
+import { getSettings, addAdvisorHistory } from '../store'
 import { getIdentity } from '../auth/sso'
 import { fetchDashboard, fetchEconomy, fetchMining } from '../esi/client'
 
@@ -24,14 +24,29 @@ function isk(n: number): string {
   return `${Math.round(n).toLocaleString('en-US')} ISK`
 }
 
-async function buildContext(): Promise<string> {
+interface AdvisorContext {
+  context: string
+  snapshot?: AdvisorHistoryEntry['snapshot']
+}
+
+async function buildContext(): Promise<AdvisorContext> {
   const identity = getIdentity()
-  if (!identity) return 'Character context: NOT LOGGED IN. No live data available.'
+  if (!identity) return { context: 'Character context: NOT LOGGED IN. No live data available.' }
 
   const [dash, econ, mining] = await Promise.all([fetchDashboard(), fetchEconomy(), fetchMining()])
 
   const lines: string[] = []
   lines.push(`Character: ${identity.characterName} (id ${identity.characterId})`)
+
+  let snapshot: AdvisorContext['snapshot']
+  if (dash.ok && dash.data) {
+    snapshot = {
+      isk: dash.data.walletBalance,
+      skillPoints: dash.data.skillPoints,
+      locationName: dash.data.location.solarSystemName,
+      shipName: dash.data.ship.name
+    }
+  }
 
   if (dash.ok && dash.data) {
     const d = dash.data
@@ -87,7 +102,7 @@ async function buildContext(): Promise<string> {
     }
   }
 
-  return `Character context:\n${lines.join('\n')}`
+  return { context: `Character context:\n${lines.join('\n')}`, snapshot }
 }
 
 export async function askAdvisor(goal: AdvisorGoal): Promise<AdvisorResponse> {
@@ -103,7 +118,7 @@ export async function askAdvisor(goal: AdvisorGoal): Promise<AdvisorResponse> {
   }
 
   try {
-    const context = await buildContext()
+    const { context, snapshot } = await buildContext()
     const client = new Anthropic({ apiKey: settings.anthropicApiKey })
 
     const userMessage =
@@ -128,6 +143,20 @@ export async function askAdvisor(goal: AdvisorGoal): Promise<AdvisorResponse> {
       .trim()
 
     if (!advice) return { ok: false, error: 'The advisor returned no text. Try rephrasing the goal.' }
+
+    try {
+      addAdvisorHistory({
+        id: Math.random().toString(36).slice(2) + Date.now().toString(36),
+        goal: goal.goal,
+        focus: goal.focus,
+        advice,
+        createdAt: Date.now(),
+        snapshot: snapshot ?? { isk: 0, skillPoints: 0 }
+      })
+    } catch {
+      /* history saving must never break the advisor response */
+    }
+
     return { ok: true, advice }
   } catch (e) {
     const err = e as Error & { status?: number }
