@@ -19,7 +19,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
-    "electron-updater": "^6.6.2"
+    "electron-updater": "^6.6.2",
+    "jose": "^5.10.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",

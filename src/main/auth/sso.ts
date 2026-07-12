@@ -1,11 +1,20 @@
 import { createHash, randomBytes } from 'crypto'
 import { shell, BrowserWindow } from 'electron'
+import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose'
 import { AuthState, CharacterIdentity } from '@shared/types'
 import { ALL_SCOPES } from '@shared/scopes'
 import { getSettings, getRefreshToken, saveRefreshToken, clearRefreshToken } from '../store'
 
 const AUTHORIZE_URL = 'https://login.eveonline.com/v2/oauth/authorize/'
 const TOKEN_URL = 'https://login.eveonline.com/v2/oauth/token'
+const SSO_METADATA_URL = 'https://login.eveonline.com/.well-known/oauth-authorization-server'
+const FALLBACK_JWKS_URI = 'https://login.eveonline.com/oauth/jwks'
+// EVE has published the token issuer in a few forms over time — accept any.
+const KNOWN_ISSUERS = [
+  'login.eveonline.com',
+  'https://login.eveonline.com',
+  'https://login.eveonline.com/'
+]
 
 interface Tokens {
   accessToken: string
@@ -32,15 +41,53 @@ function base64url(input: Buffer): string {
   return input.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-function decodeJwt(token: string): Record<string, unknown> {
-  const parts = token.split('.')
-  if (parts.length < 2) throw new Error('Malformed token')
-  const payload = Buffer.from(parts[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8')
-  return JSON.parse(payload)
+// ---- Access-token verification (EVE SSO JWT) -------------------------------
+
+let jwks: ReturnType<typeof createRemoteJWKSet> | null = null
+let issuers: string[] = KNOWN_ISSUERS
+
+/**
+ * Build (once) the remote JWKS used to verify SSO tokens, discovering the
+ * jwks_uri and issuer from EVE's SSO metadata as EVE recommends, and falling
+ * back to the well-known values if the metadata is unreachable. `jose` caches
+ * the fetched keys internally.
+ */
+async function getJwks(): Promise<ReturnType<typeof createRemoteJWKSet>> {
+  if (jwks) return jwks
+  let jwksUri = FALLBACK_JWKS_URI
+  try {
+    const res = await fetch(SSO_METADATA_URL, { headers: { Accept: 'application/json' } })
+    if (res.ok) {
+      const meta = (await res.json()) as { jwks_uri?: string; issuer?: string }
+      if (meta.jwks_uri) jwksUri = meta.jwks_uri
+      if (meta.issuer) issuers = [meta.issuer, ...KNOWN_ISSUERS]
+    }
+  } catch {
+    /* fall back to the well-known jwks_uri + issuers */
+  }
+  jwks = createRemoteJWKSet(new URL(jwksUri))
+  return jwks
 }
 
-function identityFromAccessToken(accessToken: string): CharacterIdentity {
-  const claims = decodeJwt(accessToken)
+/**
+ * Verify an EVE SSO access token per EVE's guidance: validate the signature
+ * against the SSO JWKS, plus the issuer, the audience (our client id), and
+ * expiry. Returns the validated claims; throws if verification fails.
+ */
+async function verifyAccessToken(accessToken: string, clientId: string): Promise<JWTPayload> {
+  const keySet = await getJwks()
+  const { payload } = await jwtVerify(accessToken, keySet, {
+    issuer: issuers,
+    audience: clientId
+  })
+  return payload
+}
+
+async function identityFromAccessToken(
+  accessToken: string,
+  clientId: string
+): Promise<CharacterIdentity> {
+  const claims = await verifyAccessToken(accessToken, clientId)
   const sub = String(claims.sub ?? '') // "CHARACTER:EVE:12345"
   const characterId = Number(sub.split(':').pop())
   const rawScopes = claims.scp
@@ -199,7 +246,7 @@ export async function handleCallbackUrl(url: string): Promise<void> {
     })
 
     tokens = newTokens
-    identity = identityFromAccessToken(newTokens.accessToken)
+    identity = await identityFromAccessToken(newTokens.accessToken, p.clientId)
     saveRefreshToken(newTokens.refreshToken)
 
     const s: AuthState = { status: 'logged-in', identity }
@@ -250,7 +297,7 @@ async function refreshAccessToken(refreshToken: string): Promise<void> {
     client_id: settings.ssoClientId
   })
   tokens = newTokens
-  identity = identityFromAccessToken(newTokens.accessToken)
+  identity = await identityFromAccessToken(newTokens.accessToken, settings.ssoClientId)
   saveRefreshToken(newTokens.refreshToken)
 }
 
