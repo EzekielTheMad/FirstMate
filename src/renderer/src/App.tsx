@@ -9,6 +9,8 @@ import { Combat } from './views/Combat'
 import { Advisor } from './views/Advisor'
 import { Settings } from './views/Settings'
 import { Loader, EmptyState, ErrorBox } from './components/ui'
+import { Nav } from './components/Nav'
+import { EveClock } from './components/EveClock'
 
 type TabId =
   | 'dashboard'
@@ -106,6 +108,7 @@ export function App(): JSX.Element {
           <span>FirstMate</span>
         </div>
         <div className="spacer" />
+        <EveClock />
         {identity ? (
           <div className="who">
             {identity.portrait && <img src={identity.portrait} alt="" />}
@@ -137,27 +140,18 @@ export function App(): JSX.Element {
         )}
       </div>
 
-      <div className="tabbar">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            className={t.id === tab ? 'active' : ''}
-            onClick={() => setTab(t.id)}
-          >
-            <span className="ico">{t.icon}</span>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <div className="body">
+        <Nav tabs={TABS} active={tab} onSelect={setTab} />
 
-      <div className="content">
-        <TabContent
-          tab={active}
-          auth={auth}
-          settings={settings}
-          onLogin={login}
-          onSettingsSaved={setSettings}
-        />
+        <div className="content">
+          <TabContent
+            tab={active}
+            auth={auth}
+            settings={settings}
+            onLogin={login}
+            onSettingsSaved={setSettings}
+          />
+        </div>
       </div>
     </div>
   )

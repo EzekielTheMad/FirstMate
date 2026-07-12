@@ -109,55 +109,104 @@ body {
   color: var(--text-faint);
 }
 
-/* ---- Tab bar ---- */
+/* ---- EVE (UTC) clock ---- */
 
-.tabbar {
+.eve-clock {
   display: flex;
+  align-items: center;
+  gap: 6px;
+  -webkit-app-region: no-drag;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-soft);
+  font-size: 11px;
+  flex: none;
+}
+
+.eve-clock-label {
+  color: var(--text-faint);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.eve-clock-time {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* ---- Body layout (nav rail + content) ---- */
+
+.body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ---- Nav rail ---- */
+
+.nav-rail {
+  flex: none;
+  width: 64px;
+  display: flex;
+  flex-direction: column;
   gap: 2px;
-  padding: 6px 8px;
-  overflow-x: auto;
-  border-bottom: 1px solid var(--border-soft);
+  padding: 8px 6px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border-soft);
   background: rgba(9, 15, 26, 0.6);
   scrollbar-width: thin;
 }
 
-.tabbar button {
+.nav-item {
   -webkit-app-region: no-drag;
   appearance: none;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-dim);
-  padding: 7px 12px;
+  padding: 9px 4px 8px;
   border-radius: var(--radius-sm);
-  font-size: 12.5px;
-  font-weight: 600;
   cursor: pointer;
-  white-space: nowrap;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 3px;
   transition: all 0.12s ease;
 }
 
-.tabbar button:hover {
+.nav-item:hover {
   color: var(--text);
   background: var(--bg-panel-2);
 }
 
-.tabbar button.active {
+.nav-item.active {
   color: var(--accent);
   background: var(--accent-dim);
   border-color: rgba(56, 189, 248, 0.3);
 }
 
-.tabbar button .ico {
-  font-size: 14px;
+.nav-item .ico {
+  font-size: 17px;
+  line-height: 1;
+}
+
+.nav-item .label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 54px;
 }
 
 /* ---- Content ---- */
 
 .content {
   flex: 1;
+  min-width: 0;
   overflow-y: auto;
   padding: 14px;
   scrollbar-width: thin;
