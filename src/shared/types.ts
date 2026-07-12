@@ -154,6 +154,60 @@ export interface MiningData {
   totalEstimatedValue: number
 }
 
+export interface MaterialHolding {
+  typeId: number
+  typeName?: string
+  quantity: number
+  /** Market-average value of the raw item itself. */
+  rawValue: number
+  /** Estimated value if reprocessed into minerals (0 if not a tabled ore). */
+  refinedValue: number
+  locations: {
+    locationId: number
+    locationName?: string
+    quantity: number
+  }[]
+}
+
+export interface MaterialsData {
+  holdings: MaterialHolding[]
+  totalRawValue: number
+  totalRefinedValue: number
+}
+
+export interface IndustryJob {
+  jobId: number
+  activity: string
+  productName?: string
+  blueprintName?: string
+  status: string
+  startDate: string
+  endDate: string
+  locationName?: string
+  runs: number
+}
+
+export interface IndustryData {
+  jobs: IndustryJob[]
+}
+
+export interface ImplantInfo {
+  typeId: number
+  typeName?: string
+}
+
+export interface JumpClone {
+  locationId: number
+  locationName?: string
+  implants: ImplantInfo[]
+}
+
+export interface ClonesData {
+  activeImplants: ImplantInfo[]
+  jumpClones: JumpClone[]
+  homeLocationName?: string
+}
+
 /** A wormhole/exploration chain is local-only — ESI does not expose connections. */
 export interface WormholeSignature {
   id: string
@@ -271,6 +325,9 @@ export interface FirstMateApi {
     dashboard: () => Promise<EsiResult<DashboardData>>
     economy: () => Promise<EsiResult<EconomyData>>
     mining: () => Promise<EsiResult<MiningData>>
+    materials: () => Promise<EsiResult<MaterialsData>>
+    industry: () => Promise<EsiResult<IndustryData>>
+    clones: () => Promise<EsiResult<ClonesData>>
   }
   exploration: {
     get: () => Promise<ExplorationState>
