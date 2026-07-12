@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { AuthState, PublicSettings } from '@shared/types'
+import { useUpdates } from './lib/hooks'
 import { Dashboard } from './views/Dashboard'
 import { Exploration } from './views/Exploration'
 import { Economy } from './views/Economy'
@@ -40,6 +41,12 @@ export function App(): JSX.Element {
   const [auth, setAuth] = useState<AuthState>({ status: 'logged-out' })
   const [settings, setSettings] = useState<PublicSettings | null>(null)
   const [tab, setTab] = useState<TabId>('dashboard')
+  const updates = useUpdates()
+  const [bannerDismissed, setBannerDismissed] = useState(false)
+  const updateReady =
+    !bannerDismissed &&
+    (updates?.status === 'available' || updates?.status === 'downloaded') &&
+    Boolean(updates?.newVersion)
 
   useEffect(() => {
     window.firstmate.settings.get().then(setSettings)
@@ -64,6 +71,35 @@ export function App(): JSX.Element {
 
   return (
     <div className="app">
+      {updateReady && (
+        <div
+          className="update-banner"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '8px 14px',
+            background: 'var(--accent-soft, rgba(56,189,248,0.15))',
+            borderBottom: '1px solid var(--border-soft)',
+            fontSize: 13
+          }}
+        >
+          <span>
+            FirstMate <strong>v{updates?.newVersion}</strong> is available.
+          </span>
+          <span className="grow" style={{ flex: 1 }} />
+          <button className="btn sm primary" onClick={() => setTab('settings')}>
+            View &amp; install
+          </button>
+          <button
+            className="btn sm"
+            aria-label="Dismiss"
+            onClick={() => setBannerDismissed(true)}
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <div className="topbar">
         <div className="brand">
           <span className="mark">FM</span>
