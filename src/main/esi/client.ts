@@ -5,6 +5,7 @@ import {
   MarketOrder,
   MiningData,
   MiningLedgerEntry,
+  SkillQueueEntry,
   WalletJournalEntry
 } from '@shared/types'
 import { getValidAccessToken, getIdentity, setClearAuthCaches } from '../auth/sso'
@@ -147,6 +148,7 @@ export function fetchDashboard(): Promise<EsiResult<DashboardData>> {
     if (location.station_id) idsToResolve.push(location.station_id)
     const nextSkill = queue[0]
     if (nextSkill) idsToResolve.push(nextSkill.skill_id)
+    idsToResolve.push(...queue.map((q) => q.skill_id))
 
     // Region name via constellation -> region
     let regionName: string | undefined
@@ -190,7 +192,14 @@ export function fetchDashboard(): Promise<EsiResult<DashboardData>> {
             finishesAt: nextSkill.finish_date,
             level: nextSkill.finished_level
           }
-        : undefined
+        : undefined,
+      skillQueue: queue.map(
+        (q): SkillQueueEntry => ({
+          name: nameOf(q.skill_id),
+          level: q.finished_level,
+          finishesAt: q.finish_date
+        })
+      )
     }
   })
 }

@@ -6,13 +6,24 @@ export interface AsyncState<T> {
   data?: T
   error?: string
   reload: () => void
+  /** epoch ms of the last successful load, if any. */
+  lastUpdatedAt?: number
 }
 
-/** Run an async loader on mount, with a manual reload and unmount safety. */
-export function useAsync<T>(loader: () => Promise<T>, deps: unknown[] = []): AsyncState<T> {
+/**
+ * Run an async loader on mount, with a manual reload and unmount safety.
+ * When `refreshMs` is provided and > 0, the loader is re-run on that interval
+ * (cleaned up on unmount / when the interval changes).
+ */
+export function useAsync<T>(
+  loader: () => Promise<T>,
+  deps: unknown[] = [],
+  refreshMs?: number
+): AsyncState<T> {
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<T>()
   const [error, setError] = useState<string>()
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number>()
   const mounted = useRef(true)
 
   const run = useCallback(() => {
@@ -20,7 +31,10 @@ export function useAsync<T>(loader: () => Promise<T>, deps: unknown[] = []): Asy
     setError(undefined)
     loader()
       .then((d) => {
-        if (mounted.current) setData(d)
+        if (mounted.current) {
+          setData(d)
+          setLastUpdatedAt(Date.now())
+        }
       })
       .catch((e) => {
         if (mounted.current) setError(String(e))
@@ -39,7 +53,13 @@ export function useAsync<T>(loader: () => Promise<T>, deps: unknown[] = []): Asy
     }
   }, [run])
 
-  return { loading, data, error, reload: run }
+  useEffect(() => {
+    if (!refreshMs || refreshMs <= 0) return undefined
+    const id = setInterval(run, refreshMs)
+    return () => clearInterval(id)
+  }, [run, refreshMs])
+
+  return { loading, data, error, reload: run, lastUpdatedAt }
 }
 
 export function genId(): string {
