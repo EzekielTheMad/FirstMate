@@ -65,7 +65,7 @@ export function Industry({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.Ele
                   <div className="truncate">{j.productName ?? j.blueprintName ?? 'Job'}</div>
                   <div className="faint" style={{ fontSize: 11 }}>
                     {j.activity} · {j.runs} run{j.runs === 1 ? '' : 's'} ·{' '}
-                    {j.locationName ?? '—'}
+                    {j.locationName ?? (j.locationId ? `Location ${j.locationId}` : '—')}
                   </div>
                 </span>
                 {ready ? (

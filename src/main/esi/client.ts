@@ -500,6 +500,7 @@ export function fetchIndustryJobs(characterId?: number): Promise<EsiResult<Indus
       startDate: r.start_date,
       endDate: r.end_date,
       locationName: nameOf(r.station_id ?? r.facility_id),
+      locationId: r.station_id ?? r.facility_id ?? 0,
       runs: r.runs
     }))
 

@@ -184,6 +184,7 @@ export interface IndustryJob {
   startDate: string
   endDate: string
   locationName?: string
+  locationId: number
   runs: number
 }
 
