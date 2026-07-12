@@ -46,35 +46,39 @@ Anthropic API key are stored locally and encrypted at rest with the OS keystore 
 
 ## Setup
 
-### 1. Register an EVE application
+FirstMate ships with a built-in EVE application Client ID, so **most people just install and log
+in** — no EVE developer account needed. Click **Log in with EVE**, approve the consent page in
+your browser, and your character connects. (For the AI Advisor, add your own Anthropic API key in
+Settings — see below.)
 
-1. Go to <https://developers.eveonline.com> and create a new application.
-2. Connection type: **Authentication & API Access**.
-3. Request the scopes you want (FirstMate uses a read-only set — see `src/shared/scopes.ts`).
-4. Set the **Callback URL** to exactly:
-
-   ```
-   eveauth-firstmate://callback
-   ```
-
-   EVE's portal only accepts `https` URLs or a **custom scheme starting with `eveauth`**
-   (lower-case letters, digits, `+`, `.`, `-`), so FirstMate uses a custom scheme and registers
-   itself as the OS handler for it. If you change the scheme in Settings, register the matching
-   `…://callback` URL here — they must match exactly.
-5. Copy the **Client ID**.
-
-### 2. Run it
+### Run from source
 
 ```bash
 npm install
 npm run dev
 ```
 
-On first launch, open **Settings**, paste your **Client ID**, (optionally) your **Anthropic API
-key**, and save. Then click **Log in with EVE** — your browser opens the EVE consent page, and
-after you approve, the app connects to your character.
+Then click **Log in with EVE**.
 
-### 3. Build a Windows installer
+### (Optional) Use your own EVE application
+
+If you'd rather run your own EVE registration instead of the shipped one:
+
+1. Go to <https://developers.eveonline.com> and create a new application.
+2. Connection type: **Authentication & API Access**.
+3. Request the scopes you want (FirstMate uses a read-only set — see `src/shared/scopes.ts`).
+4. Set the **Callback URL** to exactly `eveauth-firstmate://callback` (or a matching
+   `<your-scheme>://callback` if you change the scheme in Settings).
+
+   EVE's portal only accepts `https` URLs or a **custom scheme starting with `eveauth`**
+   (lower-case letters, digits, `+`, `.`, `-`), so FirstMate uses a custom scheme and registers
+   itself as the OS handler for it.
+5. In **Settings**, paste your **Client ID** (and matching scheme) and save.
+
+> The Client ID is not a secret for a PKCE (public) client, so it's safe to ship one. The app
+> never uses a client secret.
+
+### Build a Windows installer
 
 ```bash
 npm run package

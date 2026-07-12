@@ -22,7 +22,10 @@ export interface AppSettings {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  ssoClientId: '',
+  // Shipped Client ID so friends can just install and log in — no EVE developer
+  // registration needed. This is a PKCE (public) client, so the Client ID is
+  // not a secret. Override it in Settings to use your own EVE application.
+  ssoClientId: 'b830c7783f08444d9b12465296aa219d',
   callbackScheme: 'eveauth-firstmate',
   anthropicApiKey: '',
   advisorModel: 'claude-opus-4-8',
