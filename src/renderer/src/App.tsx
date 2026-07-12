@@ -70,6 +70,7 @@ export function App(): JSX.Element {
 
   const identity = auth.identity
   const active = TABS.find((t) => t.id === tab) ?? TABS[0]
+  const autoRefreshMs = settings?.autoRefreshSeconds ? settings.autoRefreshSeconds * 1000 : undefined
 
   return (
     <div className="app">
@@ -150,6 +151,7 @@ export function App(): JSX.Element {
             settings={settings}
             onLogin={login}
             onSettingsSaved={setSettings}
+            autoRefreshMs={autoRefreshMs}
           />
         </div>
       </div>
@@ -162,13 +164,15 @@ function TabContent({
   auth,
   settings,
   onLogin,
-  onSettingsSaved
+  onSettingsSaved,
+  autoRefreshMs
 }: {
   tab: Tab
   auth: AuthState
   settings: PublicSettings | null
   onLogin: () => void
   onSettingsSaved: (s: PublicSettings) => void
+  autoRefreshMs?: number
 }): JSX.Element {
   if (tab.needsAuth && auth.status !== 'logged-in') {
     if (auth.status === 'logging-in') return <Loader label="Waiting for EVE SSO…" />
@@ -194,11 +198,11 @@ function TabContent({
 
   switch (tab.id) {
     case 'dashboard':
-      return <Dashboard />
+      return <Dashboard autoRefreshMs={autoRefreshMs} />
     case 'exploration':
       return <Exploration />
     case 'economy':
-      return <Economy />
+      return <Economy autoRefreshMs={autoRefreshMs} />
     case 'mining':
       return <Mining />
     case 'combat':

@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+import { ReactNode, useEffect, useState } from 'react'
 
 export function Panel({
   title,
@@ -64,6 +64,32 @@ export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () =
         </div>
       )}
     </div>
+  )
+}
+
+/** Renders "Updated Ns ago" for a given epoch-ms timestamp, ticking every second. */
+export function UpdatedAgo({ at }: { at?: number }): JSX.Element | null {
+  const [, setTick] = useState(0)
+
+  useEffect(() => {
+    if (!at) return undefined
+    const id = setInterval(() => setTick((t) => t + 1), 1000)
+    return () => clearInterval(id)
+  }, [at])
+
+  if (!at) return null
+
+  const secs = Math.max(0, Math.round((Date.now() - at) / 1000))
+  let label: string
+  if (secs < 5) label = 'just now'
+  else if (secs < 60) label = `${secs}s ago`
+  else if (secs < 3600) label = `${Math.round(secs / 60)}m ago`
+  else label = `${Math.round(secs / 3600)}h ago`
+
+  return (
+    <span className="dim" style={{ fontSize: 11 }}>
+      {label === 'just now' ? 'Updated just now' : `Updated ${label}`}
+    </span>
   )
 }
 

@@ -1,11 +1,14 @@
 import { useAsync } from '../lib/hooks'
 import { isk, num, shortDate } from '../lib/format'
-import { Panel, Stat, Loader, ErrorBox, EmptyState } from '../components/ui'
+import { Panel, Stat, Loader, ErrorBox, EmptyState, UpdatedAgo } from '../components/ui'
+import { Sparkline } from '../components/Sparkline'
 import type { EconomyData, EsiResult } from '@shared/types'
 
-export function Economy(): JSX.Element {
-  const { loading, data, error, reload } = useAsync<EsiResult<EconomyData>>(() =>
-    window.firstmate.esi.economy()
+export function Economy({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.Element {
+  const { loading, data, error, reload, lastUpdatedAt } = useAsync<EsiResult<EconomyData>>(
+    () => window.firstmate.esi.economy(),
+    [],
+    autoRefreshMs
   )
 
   if (loading) return <Loader label="Auditing wallet & market…" />
@@ -19,15 +22,23 @@ export function Economy(): JSX.Element {
   const sellOrders = e.orders.filter((o) => !o.isBuyOrder)
   const escrow = buyOrders.reduce((s, o) => s + o.price * o.volumeRemain, 0)
   const listed = sellOrders.reduce((s, o) => s + o.price * o.volumeRemain, 0)
+  const balanceSeries = e.journal
+    .filter((j): j is typeof j & { balance: number } => j.balance !== undefined)
+    .slice()
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .map((j) => j.balance)
 
   return (
     <>
       <Panel
         title="Wallet"
         actions={
-          <button className="btn sm" onClick={reload}>
-            ↻
-          </button>
+          <>
+            <UpdatedAgo at={lastUpdatedAt} />
+            <button className="btn sm" onClick={reload}>
+              ↻
+            </button>
+          </>
         }
       >
         <div className="grid-2">
@@ -36,6 +47,17 @@ export function Economy(): JSX.Element {
           <Stat label="Buy Escrow" value={`${isk(escrow, true)}`} tone="accent" />
           <Stat label="Sell Listed" value={`${isk(listed, true)}`} tone="green" />
         </div>
+        {balanceSeries.length >= 2 && (
+          <div style={{ marginTop: 14 }}>
+            <div
+              className="dim"
+              style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.7px', marginBottom: 6 }}
+            >
+              Balance trend
+            </div>
+            <Sparkline values={balanceSeries} height={44} />
+          </div>
+        )}
       </Panel>
 
       <Panel title={`Market Orders (${e.orders.length})`}>

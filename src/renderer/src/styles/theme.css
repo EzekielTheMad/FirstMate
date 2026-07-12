@@ -528,6 +528,18 @@ textarea.field {
   line-height: 1.5;
 }
 
+.warn-box {
+  border: 1px solid rgba(245, 181, 68, 0.35);
+  background: rgba(245, 181, 68, 0.08);
+  color: var(--amber);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 12.5px;
+  margin-bottom: 12px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
 .actions {
   display: flex;
   gap: 8px;
@@ -593,4 +605,27 @@ textarea.field {
   max-height: 340px;
   overflow-y: auto;
   scrollbar-width: thin;
+}
+
+/* ---- Sparkline ---- */
+
+.sparkline {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* ---- Advisor history ---- */
+
+.history-entry {
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.history-entry:last-child {
+  border-bottom: none;
+}
+
+.history-entry .row {
+  border-bottom: none;
+  cursor: pointer;
 }
