@@ -25,9 +25,16 @@ secondary monitor.
 | **Advisor** | Enter a goal → prioritized recommendations from Claude, using your live ISK/skills/location/orders as context | Anthropic API |
 | **Settings** | EVE SSO Client ID, callback port, Anthropic key & model | — |
 
-Authentication uses the **OAuth 2.0 PKCE** flow — no client secret required. Your refresh token
-and Anthropic API key are stored locally and encrypted at rest with the OS keystore (Electron
+Authentication uses the **OAuth 2.0 PKCE** flow — no client secret required. The SSO redirect
+comes back through a **custom URL scheme** (`eveauth-firstmate://callback`) that the app registers
+as an OS protocol handler, so no local web server or open port is needed. Your refresh token and
+Anthropic API key are stored locally and encrypted at rest with the OS keystore (Electron
 `safeStorage`) when available.
+
+> **Custom-scheme handlers work best from a packaged/installed build.** In `npm run dev` on
+> Windows the app registers the electron binary + entry script as the handler, which usually works;
+> if the browser can't hand the redirect back during development, run a packaged build
+> (`npm run package`) to test the full login flow.
 
 ---
 
@@ -47,10 +54,13 @@ and Anthropic API key are stored locally and encrypted at rest with the OS keyst
 4. Set the **Callback URL** to exactly:
 
    ```
-   http://localhost:24123/callback
+   eveauth-firstmate://callback
    ```
 
-   (Use a different port if you change it in Settings — they must match.)
+   EVE's portal only accepts `https` URLs or a **custom scheme starting with `eveauth`**
+   (lower-case letters, digits, `+`, `.`, `-`), so FirstMate uses a custom scheme and registers
+   itself as the OS handler for it. If you change the scheme in Settings, register the matching
+   `…://callback` URL here — they must match exactly.
 5. Copy the **Client ID**.
 
 ### 2. Run it

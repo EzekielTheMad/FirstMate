@@ -1,8 +1,9 @@
 import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { registerIpc } from './ipc'
-import { restoreSession, getAuthState } from './auth/sso'
+import { restoreSession, getAuthState, handleCallbackUrl } from './auth/sso'
 import { getSettings } from './store'
+import { registerProtocol, findCallbackUrl } from './protocol'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -43,25 +44,53 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(async () => {
-  registerIpc(() => mainWindow)
-  createWindow()
+// Ensure a single instance so the SSO redirect is routed to the running app.
+const gotLock = app.requestSingleInstanceLock()
+if (!gotLock) {
+  app.quit()
+} else {
+  // Windows/Linux: the browser redirect launches a second instance; its argv
+  // carries the deep link. Forward it to this (primary) instance.
+  app.on('second-instance', (_e, argv) => {
+    const url = findCallbackUrl(argv)
+    if (url) handleCallbackUrl(url)
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+    }
+  })
 
-  // Try to restore a session silently on startup.
-  try {
-    await restoreSession()
+  // macOS delivers the deep link via open-url.
+  app.on('open-url', (_e, url) => {
+    handleCallbackUrl(url)
+    mainWindow?.focus()
+  })
+
+  app.whenReady().then(async () => {
+    registerProtocol(getSettings().callbackScheme)
+    registerIpc(() => mainWindow)
+    createWindow()
+
+    // Cold start on Windows: a deep link may be in argv.
+    const initialUrl = findCallbackUrl(process.argv)
+    if (initialUrl) handleCallbackUrl(initialUrl)
+
+    // Try to restore a session silently on startup.
+    try {
+      await restoreSession()
+    } catch {
+      /* ignore */
+    }
     mainWindow?.webContents.on('did-finish-load', () => {
       mainWindow?.webContents.send('auth:changed', getAuthState())
     })
-  } catch {
-    /* ignore */
-  }
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
   })
-})
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
-})
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit()
+  })
+}

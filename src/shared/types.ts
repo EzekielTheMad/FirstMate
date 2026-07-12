@@ -5,8 +5,12 @@
 export interface AppSettings {
   /** EVE developer application Client ID (register at developers.eveonline.com). */
   ssoClientId: string
-  /** Loopback callback port. Must match the callback URL registered on the app. */
-  callbackPort: number
+  /**
+   * Custom URL scheme used for the SSO callback. EVE's developer portal only
+   * accepts https or a custom scheme starting with "eveauth" (lower-case
+   * letters, digits, +, ., or -). The redirect URI is `${scheme}://callback`.
+   */
+  callbackScheme: string
   /** Anthropic API key for the AI Advisor (kept encrypted at rest). */
   anthropicApiKey: string
   /** Anthropic model id for the AI Advisor. */
@@ -19,7 +23,7 @@ export interface AppSettings {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   ssoClientId: '',
-  callbackPort: 24123,
+  callbackScheme: 'eveauth-firstmate',
   anthropicApiKey: '',
   advisorModel: 'claude-opus-4-8',
   accent: '#38bdf8',
@@ -29,7 +33,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 /** Redacted view of settings sent to the renderer (never exposes secrets). */
 export interface PublicSettings {
   ssoClientId: string
-  callbackPort: number
+  callbackScheme: string
   advisorModel: string
   accent: string
   compactMode: boolean

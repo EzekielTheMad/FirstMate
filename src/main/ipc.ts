@@ -12,13 +12,17 @@ import {
 import { login, logout, getAuthState, onAuthChange } from './auth/sso'
 import { fetchDashboard, fetchEconomy, fetchMining } from './esi/client'
 import { askAdvisor } from './ai/advisor'
+import { registerProtocol } from './protocol'
 
 export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // Settings
   ipcMain.handle('settings:get', () => toPublicSettings(getSettings()))
-  ipcMain.handle('settings:update', (_e, patch: Partial<AppSettings>) =>
-    toPublicSettings(saveSettings(patch))
-  )
+  ipcMain.handle('settings:update', (_e, patch: Partial<AppSettings>) => {
+    const saved = saveSettings(patch)
+    // If the SSO callback scheme changed, re-register the OS protocol handler.
+    if (patch.callbackScheme) registerProtocol(saved.callbackScheme)
+    return toPublicSettings(saved)
+  })
 
   // Auth
   ipcMain.handle('auth:login', () => login())

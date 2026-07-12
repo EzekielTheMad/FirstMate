@@ -1,5 +1,4 @@
 import { createHash, randomBytes } from 'crypto'
-import { createServer, Server } from 'http'
 import { shell, BrowserWindow } from 'electron'
 import { AuthState, CharacterIdentity } from '@shared/types'
 import { ALL_SCOPES } from '@shared/scopes'
@@ -18,6 +17,16 @@ let tokens: Tokens | null = null
 let identity: CharacterIdentity | null = null
 let listeners: Array<(s: AuthState) => void> = []
 let loginInFlight = false
+
+/** In-flight PKCE login awaiting the deep-link callback. */
+interface PendingLogin {
+  state: string
+  codeVerifier: string
+  clientId: string
+  resolve: (s: AuthState) => void
+  timeout: NodeJS.Timeout
+}
+let pending: PendingLogin | null = null
 
 function base64url(input: Buffer): string {
   return input.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
@@ -99,13 +108,23 @@ async function exchangeToken(body: Record<string, string>): Promise<Tokens> {
 }
 
 /**
- * Run the interactive PKCE login: spin up a loopback server, open the system
- * browser to the EVE SSO consent page, capture the callback, exchange the code.
+ * Begin an interactive PKCE login. Opens the system browser to the EVE SSO
+ * consent page; the redirect comes back via the app's custom URL scheme and is
+ * delivered to `handleCallbackUrl` (wired up in the main process). Resolves once
+ * the callback is processed (or on timeout / error).
  */
 export async function login(): Promise<AuthState> {
   const settings = getSettings()
   if (!settings.ssoClientId) {
     return { status: 'error', error: 'No SSO Client ID set. Add it in Settings first.' }
+  }
+
+  // Cancel any previous in-flight attempt.
+  if (pending) {
+    clearTimeout(pending.timeout)
+    const stale = pending
+    pending = null
+    stale.resolve({ status: 'error', error: 'Login superseded by a new attempt.' })
   }
 
   loginInFlight = true
@@ -114,7 +133,8 @@ export async function login(): Promise<AuthState> {
   const codeVerifier = base64url(randomBytes(32))
   const codeChallenge = base64url(createHash('sha256').update(codeVerifier).digest())
   const state = base64url(randomBytes(16))
-  const redirectUri = `http://localhost:${settings.callbackPort}/callback`
+  const scheme = settings.callbackScheme || 'eveauth-firstmate'
+  const redirectUri = `${scheme}://callback`
 
   const authorizeUrl = new URL(AUTHORIZE_URL)
   authorizeUrl.searchParams.set('response_type', 'code')
@@ -126,84 +146,71 @@ export async function login(): Promise<AuthState> {
   authorizeUrl.searchParams.set('state', state)
 
   return new Promise<AuthState>((resolve) => {
-    let server: Server | null = null
-    const timeout = setTimeout(() => {
-      cleanup()
-      const s: AuthState = { status: 'error', error: 'Login timed out. Please try again.' }
-      loginInFlight = false
-      emit(s)
-      resolve(s)
-    }, 3 * 60 * 1000)
-
-    function cleanup(): void {
-      clearTimeout(timeout)
-      if (server) {
-        server.close()
-        server = null
-      }
-    }
-
-    server = createServer(async (req, res) => {
-      try {
-        const url = new URL(req.url ?? '/', redirectUri)
-        if (url.pathname !== '/callback') {
-          res.writeHead(404)
-          res.end('Not found')
-          return
+    const timeout = setTimeout(
+      () => {
+        if (pending) {
+          pending = null
+          loginInFlight = false
+          const s: AuthState = { status: 'error', error: 'Login timed out. Please try again.' }
+          emit(s)
+          resolve(s)
         }
-        const returnedState = url.searchParams.get('state')
-        const code = url.searchParams.get('code')
-        const err = url.searchParams.get('error')
-
-        if (err) throw new Error(`SSO error: ${err}`)
-        if (returnedState !== state) throw new Error('State mismatch — possible CSRF, aborting.')
-        if (!code) throw new Error('No authorization code returned.')
-
-        const newTokens = await exchangeToken({
-          grant_type: 'authorization_code',
-          code,
-          client_id: settings.ssoClientId,
-          code_verifier: codeVerifier
-        })
-
-        tokens = newTokens
-        identity = identityFromAccessToken(newTokens.accessToken)
-        saveRefreshToken(newTokens.refreshToken)
-
-        res.writeHead(200, { 'Content-Type': 'text/html' })
-        res.end(SUCCESS_PAGE)
-        cleanup()
-        loginInFlight = false
-        const s: AuthState = { status: 'logged-in', identity }
-        emit(s)
-        BrowserWindow.getAllWindows()[0]?.focus()
-        resolve(s)
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'text/html' })
-        res.end(errorPage(String(e)))
-        cleanup()
-        loginInFlight = false
-        const s: AuthState = { status: 'error', error: String(e) }
-        emit(s)
-        resolve(s)
-      }
-    })
-
-    server.on('error', (e) => {
-      cleanup()
-      loginInFlight = false
-      const s: AuthState = {
-        status: 'error',
-        error: `Could not open loopback server on port ${settings.callbackPort}: ${e.message}`
-      }
-      emit(s)
-      resolve(s)
-    })
-
-    server.listen(settings.callbackPort, '127.0.0.1', () => {
-      shell.openExternal(authorizeUrl.toString())
-    })
+      },
+      3 * 60 * 1000
+    )
+    pending = { state, codeVerifier, clientId: settings.ssoClientId, resolve, timeout }
+    shell.openExternal(authorizeUrl.toString())
   })
+}
+
+/**
+ * Process a captured deep-link callback URL (e.g. `eveauth-firstmate://callback?code=…&state=…`).
+ * Called by the main process from the protocol/second-instance/open-url handlers.
+ */
+export async function handleCallbackUrl(url: string): Promise<void> {
+  if (!pending) return
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return
+  }
+  if (!/\/?callback/i.test(parsed.host + parsed.pathname)) return
+
+  const p = pending
+  clearTimeout(p.timeout)
+  pending = null
+  loginInFlight = false
+
+  const code = parsed.searchParams.get('code')
+  const returnedState = parsed.searchParams.get('state')
+  const err = parsed.searchParams.get('error')
+
+  try {
+    if (err) throw new Error(`SSO error: ${err}`)
+    if (returnedState !== p.state) throw new Error('State mismatch — possible CSRF, aborting.')
+    if (!code) throw new Error('No authorization code returned.')
+
+    const newTokens = await exchangeToken({
+      grant_type: 'authorization_code',
+      code,
+      client_id: p.clientId,
+      code_verifier: p.codeVerifier
+    })
+
+    tokens = newTokens
+    identity = identityFromAccessToken(newTokens.accessToken)
+    saveRefreshToken(newTokens.refreshToken)
+
+    const s: AuthState = { status: 'logged-in', identity }
+    emit(s)
+    BrowserWindow.getAllWindows()[0]?.focus()
+    p.resolve(s)
+  } catch (e) {
+    const s: AuthState = { status: 'error', error: String(e) }
+    emit(s)
+    p.resolve(s)
+  }
 }
 
 export function logout(): AuthState {
@@ -222,9 +229,7 @@ export function setClearAuthCaches(fn: () => void): void {
   clearAuthCaches = fn
 }
 
-/**
- * Attempt to restore a session from a stored refresh token (called on startup).
- */
+/** Attempt to restore a session from a stored refresh token (called on startup). */
 export async function restoreSession(): Promise<AuthState> {
   const refreshToken = getRefreshToken()
   if (!refreshToken) return { status: 'logged-out' }
@@ -268,22 +273,4 @@ export async function getValidAccessToken(): Promise<string> {
 
 export function getIdentity(): CharacterIdentity | null {
   return identity
-}
-
-const SUCCESS_PAGE = `<!doctype html><html><head><meta charset="utf-8"><title>FirstMate</title>
-<style>body{background:#0b1220;color:#e2e8f0;font-family:system-ui,sans-serif;display:flex;
-height:100vh;margin:0;align-items:center;justify-content:center;text-align:center}
-.card{max-width:420px;padding:32px}h1{color:#38bdf8;font-weight:600}
-p{color:#94a3b8}</style></head><body><div class="card">
-<h1>Authenticated ✓</h1><p>FirstMate is now connected to your character.<br>
-You can close this tab and return to the app.</p></div></body></html>`
-
-function errorPage(message: string): string {
-  const safe = message.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c] || c)
-  return `<!doctype html><html><head><meta charset="utf-8"><title>FirstMate</title>
-<style>body{background:#0b1220;color:#e2e8f0;font-family:system-ui,sans-serif;display:flex;
-height:100vh;margin:0;align-items:center;justify-content:center;text-align:center}
-.card{max-width:480px;padding:32px}h1{color:#f87171;font-weight:600}
-code{color:#94a3b8;font-size:12px;word-break:break-word}</style></head><body><div class="card">
-<h1>Login failed</h1><p><code>${safe}</code></p></div></body></html>`
 }

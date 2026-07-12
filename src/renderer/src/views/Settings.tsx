@@ -16,32 +16,42 @@ export function Settings({
   onSaved: (s: PublicSettings) => void
 }): JSX.Element {
   const [clientId, setClientId] = useState(settings.ssoClientId)
-  const [port, setPort] = useState(settings.callbackPort)
+  const [scheme, setScheme] = useState(settings.callbackScheme)
   const [apiKey, setApiKey] = useState('')
   const [model, setModel] = useState(settings.advisorModel)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     setClientId(settings.ssoClientId)
-    setPort(settings.callbackPort)
+    setScheme(settings.callbackScheme)
     setModel(settings.advisorModel)
   }, [settings])
 
+  // Enforce EVE's scheme rules: start with "eveauth", then lower-case letters,
+  // digits, +, ., or - — ending with a letter or digit.
+  function sanitizeScheme(v: string): string {
+    let s = v.toLowerCase().replace(/[^a-z0-9.+-]/g, '')
+    if (!s.startsWith('eveauth')) s = 'eveauth-' + s.replace(/^eveauth-?/, '')
+    return s.replace(/[.+-]+$/, '')
+  }
+
   async function save(): Promise<void> {
+    const cleanScheme = sanitizeScheme(scheme) || 'eveauth-firstmate'
     const patch: Record<string, unknown> = {
       ssoClientId: clientId.trim(),
-      callbackPort: Number(port) || 24123,
+      callbackScheme: cleanScheme,
       advisorModel: model
     }
     if (apiKey.trim()) patch.anthropicApiKey = apiKey.trim()
     const next = await window.firstmate.settings.update(patch)
     onSaved(next)
+    setScheme(next.callbackScheme)
     setApiKey('')
     setSaved(true)
     setTimeout(() => setSaved(false), 1800)
   }
 
-  const redirectUri = `http://localhost:${port}/callback`
+  const redirectUri = `${sanitizeScheme(scheme) || 'eveauth-firstmate'}://callback`
 
   return (
     <>
@@ -56,12 +66,13 @@ export function Settings({
           />
         </div>
         <div className="field-group">
-          <label className="field-label">Callback port</label>
+          <label className="field-label">Callback scheme</label>
           <input
             className="field"
-            type="number"
-            value={port}
-            onChange={(e) => setPort(Number(e.target.value))}
+            placeholder="eveauth-firstmate"
+            value={scheme}
+            onChange={(e) => setScheme(e.target.value)}
+            onBlur={() => setScheme(sanitizeScheme(scheme))}
           />
         </div>
         <div className="hint">
@@ -69,13 +80,14 @@ export function Settings({
           <a href="https://developers.eveonline.com" target="_blank" rel="noreferrer">
             developers.eveonline.com
           </a>
-          . Choose <strong>Authentication Only</strong> is not enough — pick{' '}
-          <strong>Authentication &amp; API Access</strong>, request the scopes you want, and set the
-          callback URL to exactly:
+          . Connection type <strong>Authentication &amp; API Access</strong>, request the scopes you
+          want, and set the <strong>Callback URL</strong> to exactly:
           <br />
           <code>{redirectUri}</code>
           <br />
-          Then paste the Client ID above. FirstMate uses PKCE, so no secret key is needed.
+          EVE only accepts a custom scheme starting with <code>eveauth</code> (or an https URL), so
+          FirstMate registers this as a desktop protocol and captures the redirect. Then paste the
+          Client ID above. PKCE is used, so no secret key is needed.
         </div>
       </Panel>
 

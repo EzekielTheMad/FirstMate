@@ -81,7 +81,7 @@ export function getSettings(): AppSettings {
   })
   return {
     ssoClientId: raw.ssoClientId,
-    callbackPort: raw.callbackPort,
+    callbackScheme: raw.callbackScheme || DEFAULT_SETTINGS.callbackScheme,
     anthropicApiKey: decryptSecret(raw.anthropicApiKeyEnc),
     advisorModel: raw.advisorModel,
     accent: raw.accent,
@@ -94,7 +94,7 @@ export function saveSettings(patch: Partial<AppSettings>): AppSettings {
   const merged: AppSettings = { ...current, ...patch }
   const stored: StoredSettings = {
     ssoClientId: merged.ssoClientId,
-    callbackPort: merged.callbackPort,
+    callbackScheme: merged.callbackScheme,
     advisorModel: merged.advisorModel,
     accent: merged.accent,
     compactMode: merged.compactMode,
@@ -107,7 +107,7 @@ export function saveSettings(patch: Partial<AppSettings>): AppSettings {
 export function toPublicSettings(s: AppSettings): PublicSettings {
   return {
     ssoClientId: s.ssoClientId,
-    callbackPort: s.callbackPort,
+    callbackScheme: s.callbackScheme,
     advisorModel: s.advisorModel,
     accent: s.accent,
     compactMode: s.compactMode,
