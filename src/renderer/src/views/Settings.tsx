@@ -10,6 +10,15 @@ const MODELS = [
   { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 (fastest)' }
 ]
 
+const ZOOM_STEPS = [0.8, 0.9, 1.0, 1.1, 1.25, 1.5]
+
+const REFRESH_OPTIONS = [
+  { value: 0, label: 'Off' },
+  { value: 30, label: '30s' },
+  { value: 60, label: '1m' },
+  { value: 300, label: '5m' }
+]
+
 export function Settings({
   settings,
   onSaved
@@ -55,9 +64,53 @@ export function Settings({
 
   const redirectUri = `${sanitizeScheme(scheme) || 'eveauth-firstmate'}://callback`
 
+  async function setZoom(factor: number): Promise<void> {
+    await window.firstmate.window.setZoom(factor)
+    const next = await window.firstmate.settings.get()
+    onSaved(next)
+  }
+
+  async function setAutoRefresh(seconds: number): Promise<void> {
+    const next = await window.firstmate.settings.update({ autoRefreshSeconds: seconds })
+    onSaved(next)
+  }
+
   return (
     <>
       <UpdatesPanel />
+
+      <Panel title="Display">
+        <div className="field-group">
+          <label className="field-label">Text size</label>
+          <div className="actions">
+            {ZOOM_STEPS.map((z) => (
+              <button
+                key={z}
+                className={`btn sm ${Math.abs(settings.zoomFactor - z) < 0.001 ? 'primary' : ''}`}
+                onClick={() => setZoom(z)}
+              >
+                {Math.round(z * 100)}%
+              </button>
+            ))}
+          </div>
+          <div className="hint">Also bound to Ctrl+= / Ctrl+- / Ctrl+0 in the app window.</div>
+        </div>
+        <div className="field-group" style={{ marginBottom: 0 }}>
+          <label className="field-label">Auto-refresh (Dashboard &amp; Economy)</label>
+          <div className="actions">
+            {REFRESH_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                className={`btn sm ${settings.autoRefreshSeconds === o.value ? 'primary' : ''}`}
+                onClick={() => setAutoRefresh(o.value)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Panel>
+
       <Panel title="EVE SSO">
         <div className="field-group">
           <label className="field-label">Client ID</label>
