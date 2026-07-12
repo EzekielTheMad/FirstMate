@@ -89,8 +89,6 @@ export function getSettings(): AppSettings {
     callbackScheme: raw.callbackScheme || DEFAULT_SETTINGS.callbackScheme,
     anthropicApiKey: decryptSecret(raw.anthropicApiKeyEnc),
     advisorModel: raw.advisorModel,
-    accent: raw.accent,
-    compactMode: raw.compactMode,
     zoomFactor: raw.zoomFactor ?? DEFAULT_SETTINGS.zoomFactor,
     autoRefreshSeconds: raw.autoRefreshSeconds ?? DEFAULT_SETTINGS.autoRefreshSeconds
   }
@@ -103,8 +101,6 @@ export function saveSettings(patch: Partial<AppSettings>): AppSettings {
     ssoClientId: merged.ssoClientId,
     callbackScheme: merged.callbackScheme,
     advisorModel: merged.advisorModel,
-    accent: merged.accent,
-    compactMode: merged.compactMode,
     zoomFactor: merged.zoomFactor,
     autoRefreshSeconds: merged.autoRefreshSeconds,
     anthropicApiKeyEnc: encryptSecret(merged.anthropicApiKey)
@@ -118,8 +114,6 @@ export function toPublicSettings(s: AppSettings): PublicSettings {
     ssoClientId: s.ssoClientId,
     callbackScheme: s.callbackScheme,
     advisorModel: s.advisorModel,
-    accent: s.accent,
-    compactMode: s.compactMode,
     zoomFactor: s.zoomFactor,
     autoRefreshSeconds: s.autoRefreshSeconds,
     hasAnthropicKey: Boolean(s.anthropicApiKey)

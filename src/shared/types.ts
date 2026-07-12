@@ -15,10 +15,6 @@ export interface AppSettings {
   anthropicApiKey: string
   /** Anthropic model id for the AI Advisor. */
   advisorModel: string
-  /** UI theme accent. */
-  accent: string
-  /** Whether the window should be frameless/compact (portrait-monitor friendly). */
-  compactMode: boolean
   /** Renderer zoom factor (1.0 = 100%). */
   zoomFactor: number
   /** Auto-refresh interval in seconds for data views. 0 = off. */
@@ -33,8 +29,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   callbackScheme: 'eveauth-firstmate',
   anthropicApiKey: '',
   advisorModel: 'claude-opus-4-8',
-  accent: '#38bdf8',
-  compactMode: false,
   zoomFactor: 1,
   autoRefreshSeconds: 0
 }
@@ -44,8 +38,6 @@ export interface PublicSettings {
   ssoClientId: string
   callbackScheme: string
   advisorModel: string
-  accent: string
-  compactMode: boolean
   zoomFactor: number
   autoRefreshSeconds: number
   /** True if an Anthropic key is stored, without revealing it. */
@@ -352,7 +344,6 @@ export interface FirstMateApi {
     onChange: (cb: (state: UpdateState) => void) => () => void
   }
   window: {
-    setCompact: (compact: boolean) => Promise<void>
     setZoom: (factor: number) => Promise<void>
   }
 }

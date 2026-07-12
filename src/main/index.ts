@@ -84,8 +84,6 @@ function showWindow(reason: string): void {
 }
 
 function createWindow(): void {
-  const settings = getSettings()
-
   mainWindow = new BrowserWindow({
     width: 480,
     height: 900,
@@ -95,7 +93,7 @@ function createWindow(): void {
     title: 'FirstMate',
     backgroundColor: '#0b1220',
     autoHideMenuBar: true,
-    frame: !settings.compactMode,
+    frame: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,

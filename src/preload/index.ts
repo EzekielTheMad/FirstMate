@@ -58,7 +58,6 @@ const api: FirstMateApi = {
     }
   },
   window: {
-    setCompact: (compact: boolean) => ipcRenderer.invoke('window:setCompact', compact),
     setZoom: (factor: number) => ipcRenderer.invoke('window:setZoom', factor)
   }
 }

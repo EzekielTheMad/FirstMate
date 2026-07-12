@@ -91,10 +91,6 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   })
 
   // Window
-  ipcMain.handle('window:setCompact', (_e, compact: boolean) => {
-    const win = getWindow()
-    if (win) win.setResizable(!compact ? true : true) // keep resizable; hook reserved for future
-  })
   ipcMain.handle('window:setZoom', (_e, factor: number) => {
     saveSettings({ zoomFactor: factor })
     getWindow()?.webContents.setZoomFactor(factor)
