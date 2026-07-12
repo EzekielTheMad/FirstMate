@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Panel } from '../components/ui'
+import { renderMarkdown } from '../lib/format'
+import { useUpdates } from '../lib/hooks'
 import type { PublicSettings } from '@shared/types'
 
 const MODELS = [
@@ -55,6 +57,7 @@ export function Settings({
 
   return (
     <>
+      <UpdatesPanel />
       <Panel title="EVE SSO">
         <div className="field-group">
           <label className="field-label">Client ID</label>
@@ -135,5 +138,92 @@ export function Settings({
         access is read-only.
       </div>
     </>
+  )
+}
+
+function UpdatesPanel(): JSX.Element {
+  const state = useUpdates()
+
+  async function check(): Promise<void> {
+    await window.firstmate.updates.check()
+  }
+  async function download(): Promise<void> {
+    await window.firstmate.updates.download()
+  }
+  function install(): void {
+    window.firstmate.updates.install()
+  }
+
+  const status = state?.status ?? 'idle'
+  const version = state?.currentVersion ?? '—'
+
+  return (
+    <Panel
+      title="Updates"
+      actions={
+        <button className="btn sm" onClick={check} disabled={status === 'checking'}>
+          {status === 'checking' ? 'Checking…' : 'Check for updates'}
+        </button>
+      }
+    >
+      <div className="row">
+        <span className="dim">Current version</span>
+        <span className="grow" />
+        <span className="mono">v{version}</span>
+      </div>
+
+      {status === 'up-to-date' && (
+        <div className="hint" style={{ marginTop: 8 }}>
+          You’re on the latest version.
+        </div>
+      )}
+
+      {status === 'error' && state?.error && (
+        <div className="hint" style={{ marginTop: 8 }}>
+          Couldn’t check for updates: {state.error}
+        </div>
+      )}
+
+      {(status === 'available' || status === 'downloading' || status === 'downloaded') &&
+        state?.newVersion && (
+          <div style={{ marginTop: 12 }}>
+            <div className="row">
+              <strong>Version {state.newVersion} available</strong>
+              <span className="grow" />
+              <span className="chip accent">new</span>
+            </div>
+
+            {state.releaseNotes ? (
+              <div
+                className="md"
+                style={{ marginTop: 8 }}
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(state.releaseNotes) }}
+              />
+            ) : (
+              <div className="hint" style={{ marginTop: 8 }}>
+                Release notes unavailable.
+              </div>
+            )}
+
+            <div className="actions" style={{ marginTop: 12 }}>
+              {status === 'available' && (
+                <button className="btn primary" onClick={download}>
+                  Download &amp; install
+                </button>
+              )}
+              {status === 'downloading' && (
+                <button className="btn primary" disabled>
+                  Downloading… {state.percent ?? 0}%
+                </button>
+              )}
+              {status === 'downloaded' && (
+                <button className="btn primary" onClick={install}>
+                  Restart &amp; install
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+    </Panel>
   )
 }
