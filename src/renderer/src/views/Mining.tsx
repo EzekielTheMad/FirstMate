@@ -9,17 +9,16 @@ export function Mining(): JSX.Element {
     window.firstmate.esi.mining()
   )
 
-  const byType = useMemo(() => {
-    if (!data?.data) return []
-    const map = new Map<string, { qty: number; value: number }>()
-    for (const e of data.data.entries) {
-      const key = e.typeName ?? String(e.typeId)
-      const cur = map.get(key) ?? { qty: 0, value: 0 }
-      cur.qty += e.quantity
-      cur.value += e.estimatedValue ?? 0
-      map.set(key, cur)
+  const dateSpan = useMemo(() => {
+    const entries = data?.data?.entries
+    if (!entries || entries.length === 0) return undefined
+    let earliest = entries[0]
+    let latest = entries[0]
+    for (const e of entries) {
+      if (new Date(e.date).getTime() < new Date(earliest.date).getTime()) earliest = e
+      if (new Date(e.date).getTime() > new Date(latest.date).getTime()) latest = e
     }
-    return [...map.entries()].sort((a, b) => b[1].value - a[1].value)
+    return { earliest: earliest.date, latest: latest.date }
   }, [data])
 
   if (loading) return <Loader label="Reading mining ledger…" />
@@ -33,7 +32,7 @@ export function Mining(): JSX.Element {
   return (
     <>
       <Panel
-        title="Mining Ledger"
+        title="Mined · last ~30 days"
         actions={
           <button className="btn sm" onClick={reload}>
             ↻
@@ -50,34 +49,21 @@ export function Mining(): JSX.Element {
           />
         </div>
         <div className="hint" style={{ marginTop: 10 }}>
-          Value estimates use ESI average market prices — actual refined/sell value will vary.
+          {dateSpan
+            ? `Ledger entries span ${shortDate(dateSpan.earliest)} – ${shortDate(dateSpan.latest)}. `
+            : ''}
+          This is your recent mining activity, not current ore holdings — see{' '}
+          <strong>Assets</strong> for what you have on hand. Value estimates use ESI average
+          market prices — actual refined/sell value will vary.
         </div>
       </Panel>
 
-      <Panel title={`By Ore / Type (${byType.length})`}>
-        {byType.length === 0 ? (
+      <Panel title="Recent Sessions">
+        {m.entries.length === 0 ? (
           <EmptyState title="No mining recorded">
             Your ESI mining ledger updates roughly daily. Come back after a mining session.
           </EmptyState>
         ) : (
-          <div className="scroll-list">
-            {byType.map(([type, agg]) => (
-              <div className="row" key={type}>
-                <span className="grow truncate">{type}</span>
-                <span className="mono dim" style={{ minWidth: 80, textAlign: 'right' }}>
-                  {num(agg.qty)}
-                </span>
-                <span className="mono amber" style={{ minWidth: 88, textAlign: 'right', color: 'var(--amber)' }}>
-                  {isk(agg.value, true)}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </Panel>
-
-      {m.entries.length > 0 && (
-        <Panel title="Recent Sessions">
           <div className="scroll-list">
             {m.entries.slice(0, 40).map((e, i) => (
               <div className="row" key={`${e.date}-${e.typeId}-${i}`}>
@@ -91,8 +77,8 @@ export function Mining(): JSX.Element {
               </div>
             ))}
           </div>
-        </Panel>
-      )}
+        )}
+      </Panel>
     </>
   )
 }
