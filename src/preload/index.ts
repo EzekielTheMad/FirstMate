@@ -5,7 +5,8 @@ import type {
   ExplorationState,
   CombatSnapshot,
   AdvisorGoal,
-  AuthState
+  AuthState,
+  UpdateState
 } from '@shared/types'
 
 const api: FirstMateApi = {
@@ -38,6 +39,17 @@ const api: FirstMateApi = {
   },
   advisor: {
     ask: (goal: AdvisorGoal) => ipcRenderer.invoke('advisor:ask', goal)
+  },
+  updates: {
+    getState: () => ipcRenderer.invoke('updates:getState'),
+    check: () => ipcRenderer.invoke('updates:check'),
+    download: () => ipcRenderer.invoke('updates:download'),
+    install: () => ipcRenderer.invoke('updates:install'),
+    onChange: (cb: (state: UpdateState) => void) => {
+      const listener = (_e: unknown, state: UpdateState): void => cb(state)
+      ipcRenderer.on('updates:changed', listener)
+      return () => ipcRenderer.removeListener('updates:changed', listener)
+    }
   },
   window: {
     setCompact: (compact: boolean) => ipcRenderer.invoke('window:setCompact', compact)
