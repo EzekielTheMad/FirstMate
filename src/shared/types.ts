@@ -200,6 +200,31 @@ export interface AdvisorResponse {
   error?: string
 }
 
+// ---- Updates ---------------------------------------------------------------
+
+export type UpdateStatus =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'downloading'
+  | 'downloaded'
+  | 'up-to-date'
+  | 'error'
+
+export interface UpdateState {
+  status: UpdateStatus
+  /** Version currently running. */
+  currentVersion: string
+  /** Version available/being installed, when known. */
+  newVersion?: string
+  /** Markdown release notes for `newVersion`, when known. */
+  releaseNotes?: string
+  /** Download progress 0–100, when downloading. */
+  percent?: number
+  /** Human-readable error, when status is 'error'. */
+  error?: string
+}
+
 // ---- IPC bridge surface ----------------------------------------------------
 
 export interface FirstMateApi {
@@ -228,6 +253,13 @@ export interface FirstMateApi {
   }
   advisor: {
     ask: (goal: AdvisorGoal) => Promise<AdvisorResponse>
+  }
+  updates: {
+    getState: () => Promise<UpdateState>
+    check: () => Promise<UpdateState>
+    download: () => Promise<UpdateState>
+    install: () => Promise<void>
+    onChange: (cb: (state: UpdateState) => void) => () => void
   }
   window: {
     setCompact: (compact: boolean) => Promise<void>
