@@ -25,10 +25,10 @@ export function shortDate(iso?: string): string {
   })
 }
 
-export function relativeTime(iso?: string): string {
-  if (!iso) return '—'
+export function relativeTime(iso?: string | number): string {
+  if (iso === undefined) return '—'
   const d = new Date(iso).getTime()
-  if (isNaN(d)) return iso
+  if (isNaN(d)) return String(iso)
   const diff = d - Date.now()
   const abs = Math.abs(diff)
   const mins = Math.round(abs / 60000)

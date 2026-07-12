@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { Panel, ErrorBox } from '../components/ui'
-import { renderMarkdown } from '../lib/format'
-import type { AdvisorResponse } from '@shared/types'
+import { useEffect, useState } from 'react'
+import { Panel, ErrorBox, EmptyState } from '../components/ui'
+import { renderMarkdown, isk, num, relativeTime } from '../lib/format'
+import type { AdvisorHistoryEntry, AdvisorResponse } from '@shared/types'
 
 const EXAMPLES = [
   'Become self-sufficient in a wormhole',
@@ -15,6 +15,13 @@ export function Advisor({ hasKey }: { hasKey: boolean }): JSX.Element {
   const [focus, setFocus] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<AdvisorResponse | null>(null)
+  const [history, setHistory] = useState<AdvisorHistoryEntry[]>([])
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    window.firstmate.advisor.getHistory().then(setHistory)
+  }, [])
 
   async function ask(): Promise<void> {
     if (!goal.trim() || loading) return
@@ -23,7 +30,22 @@ export function Advisor({ hasKey }: { hasKey: boolean }): JSX.Element {
     const res = await window.firstmate.advisor.ask({ goal, focus: focus || undefined })
     setResult(res)
     setLoading(false)
+    if (res.ok) {
+      window.firstmate.advisor.getHistory().then(setHistory)
+    }
   }
+
+  async function deleteEntry(id: string): Promise<void> {
+    const next = await window.firstmate.advisor.deleteHistory(id)
+    setHistory(next)
+  }
+
+  async function clearAll(): Promise<void> {
+    const next = await window.firstmate.advisor.clearHistory()
+    setHistory(next)
+  }
+
+  const sortedHistory = [...history].sort((a, b) => b.createdAt - a.createdAt)
 
   return (
     <>
@@ -81,6 +103,65 @@ export function Advisor({ hasKey }: { hasKey: boolean }): JSX.Element {
           <div className="md" dangerouslySetInnerHTML={{ __html: renderMarkdown(result.advice) }} />
         </Panel>
       )}
+
+      <Panel
+        title={`History (${history.length})`}
+        actions={
+          <>
+            {history.length > 0 && (
+              <button className="btn sm" onClick={clearAll}>
+                Clear all
+              </button>
+            )}
+            <button className="btn sm" onClick={() => setHistoryOpen((o) => !o)}>
+              {historyOpen ? 'Hide' : 'Show'}
+            </button>
+          </>
+        }
+      >
+        {historyOpen &&
+          (history.length === 0 ? (
+            <EmptyState title="No history yet">
+              Advice you receive is saved here automatically.
+            </EmptyState>
+          ) : (
+            <div className="scroll-list">
+              {sortedHistory.map((h) => (
+                <div className="history-entry" key={h.id}>
+                  <div
+                    className="row"
+                    onClick={() => setExpandedId(expandedId === h.id ? null : h.id)}
+                  >
+                    <span className="grow truncate">{h.goal}</span>
+                    <span className="dim">{relativeTime(h.createdAt)}</span>
+                    <button
+                      className="btn sm danger"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        deleteEntry(h.id)
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {expandedId === h.id && (
+                    <div style={{ padding: '2px 4px 14px' }}>
+                      <div className="faint" style={{ fontSize: 11, marginBottom: 8 }}>
+                        {isk(h.snapshot.isk, true)} ISK · {num(h.snapshot.skillPoints)} SP
+                        {h.snapshot.locationName ? ` · ${h.snapshot.locationName}` : ''}
+                        {h.snapshot.shipName ? ` · ${h.snapshot.shipName}` : ''}
+                      </div>
+                      <div
+                        className="md"
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(h.advice) }}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
+      </Panel>
     </>
   )
 }
