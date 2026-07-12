@@ -1,13 +1,21 @@
 import {
+  ClonesData,
   DashboardData,
   EconomyData,
   EsiResult,
+  ImplantInfo,
+  IndustryData,
+  IndustryJob,
+  JumpClone,
   MarketOrder,
+  MaterialHolding,
+  MaterialsData,
   MiningData,
   MiningLedgerEntry,
   SkillQueueEntry,
   WalletJournalEntry
 } from '@shared/types'
+import { MINERAL_TYPE_IDS, isMaterialType, refinedValue as computeRefinedValue } from '@shared/data/ore-minerals'
 import { getValidAccessToken, getIdentity, setClearAuthCaches } from '../auth/sso'
 
 const ESI_BASE = 'https://esi.evetech.net/latest'
@@ -303,5 +311,226 @@ export function fetchMining(): Promise<EsiResult<MiningData>> {
 
     entries.sort((a, b) => (a.date < b.date ? 1 : -1))
     return { entries, totalQuantity, totalEstimatedValue }
+  })
+}
+
+// ---- Materials (assets) -----------------------------------------------------
+
+interface AssetRow {
+  item_id: number
+  type_id: number
+  quantity: number
+  location_id: number
+  location_flag: string
+  location_type: 'station' | 'solar_system' | 'item' | 'other'
+  is_singleton: boolean
+}
+
+/**
+ * Fetch one page of the character assets endpoint via a direct fetch (rather
+ * than the shared `esi()` helper) so we can read the `X-Pages` response
+ * header for pagination.
+ */
+async function fetchAssetsPage(
+  characterId: number,
+  page: number
+): Promise<{ rows: AssetRow[]; pages: number }> {
+  const token = await getValidAccessToken()
+  const res = await fetch(`${ESI_BASE}/characters/${characterId}/assets/?page=${page}`, {
+    headers: {
+      'User-Agent': USER_AGENT,
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`
+    }
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    const err = new Error(
+      `ESI ${res.status} /characters/${characterId}/assets/: ${text.slice(0, 200)}`
+    ) as Error & { status?: number }
+    err.status = res.status
+    throw err
+  }
+  const pages = Number(res.headers.get('X-Pages') ?? '1') || 1
+  const rows = (await res.json()) as AssetRow[]
+  return { rows, pages }
+}
+
+export function fetchMaterials(characterId?: number): Promise<EsiResult<MaterialsData>> {
+  return wrap(async () => {
+    const cid = characterId ?? getIdentity()?.characterId
+    if (!cid) throw new Error('Not logged in.')
+
+    const first = await fetchAssetsPage(cid, 1)
+    let rows = first.rows
+    for (let page = 2; page <= first.pages; page++) {
+      const next = await fetchAssetsPage(cid, page)
+      rows = rows.concat(next.rows)
+    }
+
+    const materialRows = rows.filter((r) => isMaterialType(r.type_id))
+
+    const [prices] = await Promise.all([
+      getMarketPrices(),
+      resolveNames([
+        ...materialRows.map((r) => r.type_id),
+        ...materialRows.map((r) => r.location_id)
+      ])
+    ])
+
+    // Mineral price lookup for refinedValue (only the 9 tabled minerals).
+    const mineralPrices = new Map<number, number>()
+    for (const mineralTypeId of Object.values(MINERAL_TYPE_IDS)) {
+      mineralPrices.set(mineralTypeId, prices.get(mineralTypeId) ?? 0)
+    }
+
+    const byType = new Map<number, MaterialHolding>()
+    for (const row of materialRows) {
+      let holding = byType.get(row.type_id)
+      if (!holding) {
+        holding = {
+          typeId: row.type_id,
+          typeName: nameOf(row.type_id),
+          quantity: 0,
+          rawValue: 0,
+          refinedValue: 0,
+          locations: []
+        }
+        byType.set(row.type_id, holding)
+      }
+      holding.quantity += row.quantity
+
+      let loc = holding.locations.find((l) => l.locationId === row.location_id)
+      if (!loc) {
+        loc = {
+          locationId: row.location_id,
+          locationName: nameOf(row.location_id) ?? (row.location_type === 'other' ? 'Player structure' : undefined),
+          quantity: 0
+        }
+        holding.locations.push(loc)
+      }
+      loc.quantity += row.quantity
+    }
+
+    let totalRawValue = 0
+    let totalRefinedValue = 0
+    const holdings = [...byType.values()].map((holding) => {
+      const unitPrice = prices.get(holding.typeId) ?? 0
+      holding.rawValue = unitPrice * holding.quantity
+      holding.refinedValue = computeRefinedValue(holding.typeId, holding.quantity, mineralPrices)
+      totalRawValue += holding.rawValue
+      totalRefinedValue += holding.refinedValue
+      return holding
+    })
+
+    holdings.sort((a, b) => b.rawValue - a.rawValue)
+
+    return { holdings, totalRawValue, totalRefinedValue }
+  })
+}
+
+// ---- Industry jobs -----------------------------------------------------------
+
+interface IndustryJobRow {
+  job_id: number
+  activity_id: number
+  blueprint_type_id: number
+  product_type_id?: number
+  runs: number
+  status: string
+  start_date: string
+  end_date: string
+  station_id: number
+  facility_id: number
+}
+
+const ACTIVITY_LABELS: Record<number, string> = {
+  1: 'Manufacturing',
+  3: 'Research Time Efficiency',
+  4: 'Research Material Efficiency',
+  5: 'Copying',
+  8: 'Invention',
+  9: 'Reactions'
+}
+
+export function fetchIndustryJobs(characterId?: number): Promise<EsiResult<IndustryData>> {
+  return wrap(async () => {
+    const cid = characterId ?? getIdentity()?.characterId
+    if (!cid) throw new Error('Not logged in.')
+
+    const rows = await esi<IndustryJobRow[]>(
+      `/characters/${cid}/industry/jobs/?include_completed=true`,
+      { auth: true }
+    )
+
+    await resolveNames([
+      ...rows.map((r) => r.blueprint_type_id),
+      ...rows.filter((r) => r.product_type_id != null).map((r) => r.product_type_id as number),
+      ...rows.map((r) => r.station_id ?? r.facility_id)
+    ])
+
+    const jobs: IndustryJob[] = rows.map((r) => ({
+      jobId: r.job_id,
+      activity: ACTIVITY_LABELS[r.activity_id] ?? `Activity ${r.activity_id}`,
+      productName: r.product_type_id != null ? nameOf(r.product_type_id) : undefined,
+      blueprintName: nameOf(r.blueprint_type_id),
+      status: r.status,
+      startDate: r.start_date,
+      endDate: r.end_date,
+      locationName: nameOf(r.station_id ?? r.facility_id),
+      runs: r.runs
+    }))
+
+    jobs.sort((a, b) => (a.endDate < b.endDate ? 1 : -1))
+    return { jobs }
+  })
+}
+
+// ---- Clones & implants -------------------------------------------------------
+
+interface CloneRow {
+  home_location?: { location_id: number; location_type: 'station' | 'structure' }
+  jump_clones: Array<{
+    implants: number[]
+    jump_clone_id: number
+    location_id: number
+    location_type: 'station' | 'structure'
+    name?: string
+  }>
+}
+
+export function fetchClones(characterId?: number): Promise<EsiResult<ClonesData>> {
+  return wrap(async () => {
+    const cid = characterId ?? getIdentity()?.characterId
+    if (!cid) throw new Error('Not logged in.')
+
+    const [clones, implantIds] = await Promise.all([
+      esi<CloneRow>(`/characters/${cid}/clones/`, { auth: true }),
+      esi<number[]>(`/characters/${cid}/implants/`, { auth: true }).catch(() => [] as number[])
+    ])
+
+    const idsToResolve = [
+      ...implantIds,
+      ...(clones.home_location ? [clones.home_location.location_id] : []),
+      ...clones.jump_clones.flatMap((jc) => [jc.location_id, ...jc.implants])
+    ]
+    await resolveNames(idsToResolve)
+
+    const activeImplants: ImplantInfo[] = implantIds.map((id) => ({
+      typeId: id,
+      typeName: nameOf(id)
+    }))
+
+    const jumpClones: JumpClone[] = clones.jump_clones.map((jc) => ({
+      locationId: jc.location_id,
+      locationName: nameOf(jc.location_id),
+      implants: jc.implants.map((id) => ({ typeId: id, typeName: nameOf(id) }))
+    }))
+
+    return {
+      activeImplants,
+      jumpClones,
+      homeLocationName: clones.home_location ? nameOf(clones.home_location.location_id) : undefined
+    }
   })
 }
