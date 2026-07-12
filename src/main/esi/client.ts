@@ -24,11 +24,14 @@ const USER_AGENT = 'FirstMate/0.1 (EVE companion app)'
 // ---- Name resolution cache -------------------------------------------------
 
 const nameCache = new Map<number, string>()
+/** Ids /universe/names can't resolve (e.g. player structures) — skip on retry. */
+const unresolvableIds = new Set<number>()
 let marketPrices: Map<number, number> | null = null
 let marketPricesAt = 0
 
 setClearAuthCaches(() => {
   nameCache.clear()
+  unresolvableIds.clear()
   marketPrices = null
   marketPricesAt = 0
 })
@@ -67,21 +70,40 @@ async function esi<T>(path: string, opts: EsiOptions = {}): Promise<T> {
   return (await res.json()) as T
 }
 
+/**
+ * Resolve a chunk of ids via /universe/names. That endpoint is all-or-nothing:
+ * if ANY id is unresolvable (e.g. a player-structure location id), it 404s the
+ * whole batch. So on failure we binary-split to salvage the resolvable ids and
+ * isolate the bad ones (recorded in `unresolvableIds` so we don't retry them
+ * every refresh). O(log n) extra calls only in the failure case.
+ */
+async function resolveChunk(chunk: number[]): Promise<void> {
+  if (chunk.length === 0) return
+  try {
+    const results = await esi<Array<{ id: number; name: string }>>('/universe/names/', {
+      body: chunk
+    })
+    for (const r of results) nameCache.set(r.id, r.name)
+  } catch {
+    if (chunk.length === 1) {
+      unresolvableIds.add(chunk[0])
+      return
+    }
+    const mid = Math.floor(chunk.length / 2)
+    await resolveChunk(chunk.slice(0, mid))
+    await resolveChunk(chunk.slice(mid))
+  }
+}
+
 /** Resolve a batch of ids to names using the universe/names endpoint. */
 async function resolveNames(ids: number[]): Promise<void> {
-  const unique = [...new Set(ids)].filter((id) => id > 0 && !nameCache.has(id))
+  const unique = [...new Set(ids)].filter(
+    (id) => id > 0 && !nameCache.has(id) && !unresolvableIds.has(id)
+  )
   if (unique.length === 0) return
   // /universe/names accepts up to 1000 ids per call.
   for (let i = 0; i < unique.length; i += 1000) {
-    const chunk = unique.slice(i, i + 1000)
-    try {
-      const results = await esi<Array<{ id: number; name: string }>>('/universe/names/', {
-        body: chunk
-      })
-      for (const r of results) nameCache.set(r.id, r.name)
-    } catch {
-      /* leave unresolved ids blank */
-    }
+    await resolveChunk(unique.slice(i, i + 1000))
   }
 }
 
