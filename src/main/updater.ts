@@ -9,6 +9,8 @@ const REPO = 'EzekielTheMad/FirstMate'
 let state: UpdateState = { status: 'idle', currentVersion: app.getVersion() }
 let listeners: Array<(s: UpdateState) => void> = []
 let wired = false
+/** True while the silent launch-time check is in flight; its errors are swallowed. */
+let suppressNextError = false
 
 function set(patch: Partial<UpdateState>): void {
   state = { ...state, ...patch }
@@ -41,7 +43,8 @@ function updaterEnabled(): boolean {
 async function fetchReleaseNotes(version: string): Promise<string | undefined> {
   try {
     const res = await fetch(`https://api.github.com/repos/${REPO}/releases/tags/v${version}`, {
-      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'FirstMate' }
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'FirstMate' },
+      signal: AbortSignal.timeout(8000)
     })
     if (!res.ok) return undefined
     const json = (await res.json()) as { body?: string }
@@ -59,26 +62,43 @@ function wire(): void {
   autoUpdater.autoInstallOnAppQuit = false
 
   autoUpdater.on('checking-for-update', () => set({ status: 'checking', error: undefined }))
-  autoUpdater.on('update-available', async (info) => {
+  autoUpdater.on('update-available', (info) => {
+    suppressNextError = false
     const inline =
       typeof info.releaseNotes === 'string' && info.releaseNotes.trim()
         ? info.releaseNotes.trim()
         : undefined
-    const notes = inline ?? (await fetchReleaseNotes(info.version))
-    set({ status: 'available', newVersion: info.version, releaseNotes: notes })
+    // Surface availability immediately; enrich release notes without blocking so a
+    // slow/stalled GitHub fetch can never wedge the state machine in 'checking'.
+    set({ status: 'available', newVersion: info.version, releaseNotes: inline })
+    if (!inline) {
+      void fetchReleaseNotes(info.version).then((notes) => {
+        if (notes && state.newVersion === info.version && !state.releaseNotes) {
+          set({ releaseNotes: notes })
+        }
+      })
+    }
   })
-  autoUpdater.on('update-not-available', () =>
+  autoUpdater.on('update-not-available', () => {
+    suppressNextError = false
     set({ status: 'up-to-date', newVersion: undefined, releaseNotes: undefined })
-  )
+  })
   autoUpdater.on('download-progress', (p) =>
     set({ status: 'downloading', percent: Math.round(p.percent) })
   )
   autoUpdater.on('update-downloaded', (info) =>
     set({ status: 'downloaded', newVersion: info.version, percent: 100 })
   )
-  autoUpdater.on('error', (err) =>
+  autoUpdater.on('error', (err) => {
+    // Swallow the silent launch check's error so an offline start doesn't surface
+    // a spurious "couldn't check for updates" the user never triggered.
+    if (suppressNextError) {
+      suppressNextError = false
+      if (state.status === 'checking') set({ status: 'idle', error: undefined })
+      return
+    }
     set({ status: 'error', error: err?.message ?? String(err) })
-  )
+  })
 }
 
 /** Called once on app ready. No-op (silent) in dev. */
@@ -86,9 +106,10 @@ export function initUpdater(): void {
   if (!updaterEnabled()) return
   wire()
   if (process.env.FIRSTMATE_DEV_UPDATE) autoUpdater.forceDevUpdateConfig = true
-  void autoUpdater.checkForUpdates().catch((e) =>
-    set({ status: 'error', error: (e as Error).message })
-  )
+  suppressNextError = true
+  void autoUpdater.checkForUpdates().catch(() => {
+    // Silent launch check — any error is handled (swallowed) by the 'error' listener.
+  })
 }
 
 export async function checkForUpdates(): Promise<UpdateState> {
@@ -98,6 +119,7 @@ export async function checkForUpdates(): Promise<UpdateState> {
   }
   wire()
   if (process.env.FIRSTMATE_DEV_UPDATE) autoUpdater.forceDevUpdateConfig = true
+  suppressNextError = false
   try {
     await autoUpdater.checkForUpdates()
   } catch (e) {
@@ -109,6 +131,7 @@ export async function checkForUpdates(): Promise<UpdateState> {
 export async function downloadUpdate(): Promise<UpdateState> {
   if (!updaterEnabled()) return state
   wire()
+  suppressNextError = false
   try {
     set({ status: 'downloading', percent: 0, error: undefined })
     await autoUpdater.downloadUpdate()

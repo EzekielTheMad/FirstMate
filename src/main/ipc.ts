@@ -1,5 +1,12 @@
 import { ipcMain, BrowserWindow } from 'electron'
-import { AppSettings, AdvisorGoal, ExplorationState, CombatSnapshot, AuthState } from '@shared/types'
+import {
+  AppSettings,
+  AdvisorGoal,
+  ExplorationState,
+  CombatSnapshot,
+  AuthState,
+  UpdateState
+} from '@shared/types'
 import {
   getSettings,
   saveSettings,
@@ -20,7 +27,6 @@ import {
   installUpdate,
   onUpdateChange
 } from './updater'
-import type { UpdateState } from '@shared/types'
 
 export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // Settings
