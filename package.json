@@ -1,11 +1,10 @@
 {
   "name": "firstmate",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "FirstMate — an EVE Online companion desktop app (exploration, wormholes, economy, mining, combat, and an AI advisor).",
   "author": "FirstMate",
   "license": "MIT",
   "main": "./out/main/index.js",
-  "type": "module",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",

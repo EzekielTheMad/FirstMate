@@ -96,7 +96,7 @@ function createWindow(): void {
     autoHideMenuBar: true,
     frame: !settings.compactMode,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false
