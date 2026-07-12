@@ -149,6 +149,15 @@ release).
 
 Building locally on Windows instead: `npm run package` → `dist/`.
 
+## Troubleshooting
+
+- **Installed, launches, but no window appears:** update to the latest release. If it still
+  happens, send the startup log — it's written to
+  `%APPDATA%\FirstMate\firstmate\startup.log` on Windows (paste the path into Explorer's address
+  bar). It records each startup step and any renderer/preload errors.
+- **"Windows protected your PC" on first run:** the installer is unsigned. Click **More info →
+  Run anyway**. Removing this prompt requires a paid code-signing certificate.
+
 ## Notes & limitations
 
 - **Wormhole connections are not in ESI**, so the Explore tab is a manual local tracker — paste
