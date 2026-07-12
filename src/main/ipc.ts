@@ -13,6 +13,14 @@ import { login, logout, getAuthState, onAuthChange } from './auth/sso'
 import { fetchDashboard, fetchEconomy, fetchMining } from './esi/client'
 import { askAdvisor } from './ai/advisor'
 import { registerProtocol } from './protocol'
+import {
+  getUpdateState,
+  checkForUpdates,
+  downloadUpdate,
+  installUpdate,
+  onUpdateChange
+} from './updater'
+import type { UpdateState } from '@shared/types'
 
 export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // Settings
@@ -49,6 +57,16 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   // Advisor
   ipcMain.handle('advisor:ask', (_e, goal: AdvisorGoal) => askAdvisor(goal))
+
+  // Updates (auth-independent)
+  ipcMain.handle('updates:getState', () => getUpdateState())
+  ipcMain.handle('updates:check', () => checkForUpdates())
+  ipcMain.handle('updates:download', () => downloadUpdate())
+  ipcMain.handle('updates:install', () => installUpdate())
+
+  onUpdateChange((state: UpdateState) => {
+    getWindow()?.webContents.send('updates:changed', state)
+  })
 
   // Window
   ipcMain.handle('window:setCompact', (_e, compact: boolean) => {

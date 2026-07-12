@@ -6,6 +6,7 @@ import { registerIpc } from './ipc'
 import { restoreSession, getAuthState, handleCallbackUrl } from './auth/sso'
 import { getSettings } from './store'
 import { registerProtocol, findCallbackUrl } from './protocol'
+import { initUpdater } from './updater'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -186,6 +187,7 @@ if (!gotLock) {
     } catch {
       /* ignore */
     }
+    initUpdater()
     mainWindow?.webContents.on('did-finish-load', () => {
       mainWindow?.webContents.send('auth:changed', getAuthState())
     })
