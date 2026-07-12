@@ -27,7 +27,10 @@ const api: FirstMateApi = {
   esi: {
     dashboard: () => ipcRenderer.invoke('esi:dashboard'),
     economy: () => ipcRenderer.invoke('esi:economy'),
-    mining: () => ipcRenderer.invoke('esi:mining')
+    mining: () => ipcRenderer.invoke('esi:mining'),
+    materials: () => ipcRenderer.invoke('esi:materials'),
+    industry: () => ipcRenderer.invoke('esi:industry'),
+    clones: () => ipcRenderer.invoke('esi:clones')
   },
   exploration: {
     get: () => ipcRenderer.invoke('exploration:get'),

@@ -20,7 +20,14 @@ import {
   clearAdvisorHistory
 } from './store'
 import { login, logout, getAuthState, onAuthChange } from './auth/sso'
-import { fetchDashboard, fetchEconomy, fetchMining } from './esi/client'
+import {
+  fetchDashboard,
+  fetchEconomy,
+  fetchMining,
+  fetchMaterials,
+  fetchIndustryJobs,
+  fetchClones
+} from './esi/client'
 import { askAdvisor } from './ai/advisor'
 import { registerProtocol } from './protocol'
 import {
@@ -55,6 +62,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   ipcMain.handle('esi:dashboard', () => fetchDashboard())
   ipcMain.handle('esi:economy', () => fetchEconomy())
   ipcMain.handle('esi:mining', () => fetchMining())
+  ipcMain.handle('esi:materials', () => fetchMaterials())
+  ipcMain.handle('esi:industry', () => fetchIndustryJobs())
+  ipcMain.handle('esi:clones', () => fetchClones())
 
   // Exploration (local)
   ipcMain.handle('exploration:get', () => getExploration())
