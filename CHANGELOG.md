@@ -3,6 +3,21 @@
 All notable changes to FirstMate are documented here. This file is the source
 of the release notes shown in the app's updater.
 
+## [0.1.7] - 2026-07-13
+
+### Changed
+- Reorganized your inventory into two focused tabs. The **Materials** tab
+  (formerly Mining) now holds your ore, minerals, and ice — current holdings
+  (searchable/sortable, with location, value, and refined value) *plus* the
+  recent mining ledger. The **Assets** tab now shows only your gear — ships,
+  fittings, modules, ammo — so neither view is one giant mixed list.
+
+### Added
+- Asset/holding locations in **player-owned structures** (Upwell citadels) now
+  resolve to their real names instead of a generic label. This needs a new EVE
+  permission: **log out and back in once** after updating to grant it. NPC
+  station names resolve either way.
+
 ## [0.1.6] - 2026-07-13
 
 ### Changed
