@@ -3,6 +3,13 @@
 All notable changes to FirstMate are documented here. This file is the source
 of the release notes shown in the app's updater.
 
+## [0.1.8] - 2026-07-13
+
+### Fixed
+- Asset locations for items **fitted to (or in the cargo of) your active ship**
+  now show the real station/system instead of a raw id number. Items inside your
+  own containers now read "In &lt;container name&gt;".
+
 ## [0.1.7] - 2026-07-13
 
 ### Changed
