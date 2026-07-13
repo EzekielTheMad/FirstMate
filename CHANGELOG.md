@@ -3,6 +3,13 @@
 All notable changes to FirstMate are documented here. This file is the source
 of the release notes shown in the app's updater.
 
+## [0.1.5] - 2026-07-13
+
+### Fixed
+- Update release notes now render as formatted text instead of showing raw
+  `<h3>`/`<li>`/`<strong>` HTML tags. The notes are read from the release's
+  markdown and rendered properly, and wrapped lines no longer break mid-sentence.
+
 ## [0.1.4] - 2026-07-13
 
 ### Fixed
