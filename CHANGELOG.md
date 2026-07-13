@@ -3,6 +3,18 @@
 All notable changes to FirstMate are documented here. This file is the source
 of the release notes shown in the app's updater.
 
+## [0.1.9] - 2026-07-13
+
+### Added
+- New **Ships** tab: every ship you own — docked, stored, and your currently
+  flown ship — grouped by location, each expandable to its fitting laid out by
+  slot (High / Mid / Low / Rigs / Subsystems) plus drones and cargo. Empty hulls
+  are listed too, and your active ship is marked.
+
+### Changed
+- Fitted modules, rigs, drones, and cargo now live under their ship in the new
+  Ships tab, so they no longer clutter the **Assets** and **Materials** tabs.
+
 ## [0.1.8] - 2026-07-13
 
 ### Fixed
