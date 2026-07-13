@@ -146,25 +146,29 @@ export interface MiningData {
   totalEstimatedValue: number
 }
 
-export interface MaterialHolding {
+export interface AssetLocationQty {
+  locationId: number
+  locationName?: string
+  quantity: number
+}
+
+export interface AssetHolding {
   typeId: number
   typeName?: string
   quantity: number
-  /** Market-average value of the raw item itself. */
-  rawValue: number
+  /** Estimated market value (average price × quantity). */
+  value: number
+  /** True if this type is in the ore-minerals table (has a reprocessing breakdown). */
+  isOre: boolean
   /** Estimated value if reprocessed into minerals (0 if not a tabled ore). */
   refinedValue: number
-  locations: {
-    locationId: number
-    locationName?: string
-    quantity: number
-  }[]
+  locations: AssetLocationQty[]
 }
 
-export interface MaterialsData {
-  holdings: MaterialHolding[]
-  totalRawValue: number
-  totalRefinedValue: number
+export interface AssetsData {
+  holdings: AssetHolding[]
+  totalValue: number
+  itemTypeCount: number
 }
 
 export interface IndustryJob {
@@ -318,7 +322,7 @@ export interface FirstMateApi {
     dashboard: () => Promise<EsiResult<DashboardData>>
     economy: () => Promise<EsiResult<EconomyData>>
     mining: () => Promise<EsiResult<MiningData>>
-    materials: () => Promise<EsiResult<MaterialsData>>
+    assets: () => Promise<EsiResult<AssetsData>>
     industry: () => Promise<EsiResult<IndustryData>>
     clones: () => Promise<EsiResult<ClonesData>>
   }

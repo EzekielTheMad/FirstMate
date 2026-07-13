@@ -1,4 +1,6 @@
 import {
+  AssetHolding,
+  AssetsData,
   ClonesData,
   DashboardData,
   EconomyData,
@@ -8,14 +10,12 @@ import {
   IndustryJob,
   JumpClone,
   MarketOrder,
-  MaterialHolding,
-  MaterialsData,
   MiningData,
   MiningLedgerEntry,
   SkillQueueEntry,
   WalletJournalEntry
 } from '@shared/types'
-import { MINERAL_TYPE_IDS, isMaterialType, refinedValue as computeRefinedValue } from '@shared/data/ore-minerals'
+import { MINERAL_TYPE_IDS, oreComposition, refinedValue as computeRefinedValue } from '@shared/data/ore-minerals'
 import { getValidAccessToken, getIdentity, setClearAuthCaches } from '../auth/sso'
 
 const ESI_BASE = 'https://esi.evetech.net/latest'
@@ -336,7 +336,7 @@ export function fetchMining(): Promise<EsiResult<MiningData>> {
   })
 }
 
-// ---- Materials (assets) -----------------------------------------------------
+// ---- Assets -----------------------------------------------------------------
 
 interface AssetRow {
   item_id: number
@@ -378,7 +378,28 @@ async function fetchAssetsPage(
   return { rows, pages }
 }
 
-export function fetchMaterials(characterId?: number): Promise<EsiResult<MaterialsData>> {
+/**
+ * Assets can nest arbitrarily (an item inside a container inside a ship inside
+ * a station, etc). Walk up the `location_id` chain until we reach a row whose
+ * location is not itself another asset — that's the "root" location (a
+ * station, structure, or solar system) the item ultimately sits in.
+ */
+function rootLocation(
+  row: AssetRow,
+  byItemId: Map<number, AssetRow>
+): { id: number; type: AssetRow['location_type'] } {
+  let cur = row
+  const seen = new Set<number>()
+  let hops = 0
+  while (cur.location_type === 'item' && byItemId.has(cur.location_id) && !seen.has(cur.item_id) && hops < 50) {
+    seen.add(cur.item_id)
+    hops++
+    cur = byItemId.get(cur.location_id)!
+  }
+  return { id: cur.location_id, type: cur.location_type }
+}
+
+export function fetchAssets(characterId?: number): Promise<EsiResult<AssetsData>> {
   return wrap(async () => {
     const cid = characterId ?? getIdentity()?.characterId
     if (!cid) throw new Error('Not logged in.')
@@ -390,15 +411,30 @@ export function fetchMaterials(characterId?: number): Promise<EsiResult<Material
       rows = rows.concat(next.rows)
     }
 
-    const materialRows = rows.filter((r) => isMaterialType(r.type_id))
+    const byItemId = new Map<number, AssetRow>()
+    for (const row of rows) byItemId.set(row.item_id, row)
 
-    const [prices] = await Promise.all([
-      getMarketPrices(),
-      resolveNames([
-        ...materialRows.map((r) => r.type_id),
-        ...materialRows.map((r) => r.location_id)
-      ])
-    ])
+    // Resolve each row's root (non-nested) location up front.
+    const roots = new Map<number, { id: number; type: AssetRow['location_type'] }>()
+    for (const row of rows) roots.set(row.item_id, rootLocation(row, byItemId))
+
+    const prices = await getMarketPrices()
+
+    // Type ids and root location ids are resolved as separate /universe/names
+    // calls, so an unresolvable structure id can never affect type-name
+    // resolution (resolveNames already isolates bad ids within a call, but
+    // keeping the batches separate avoids mixing the two id spaces at all).
+    const typeIds = [...new Set(rows.map((r) => r.type_id))]
+    const locationIds = [...new Set([...roots.values()].map((r) => r.id))]
+    await Promise.all([resolveNames(typeIds), resolveNames(locationIds)])
+
+    // Stations and solar systems resolve via /universe/names; player-owned
+    // structures generally don't (ESI needs a docking scope for those), so we
+    // label them generically. Anything else unresolved falls through to the
+    // view's "Location <id>" fallback.
+    function locationName(loc: { id: number; type: AssetRow['location_type'] }): string | undefined {
+      return nameOf(loc.id) ?? (loc.type === 'other' ? 'Player structure' : undefined)
+    }
 
     // Mineral price lookup for refinedValue (only the 9 tabled minerals).
     const mineralPrices = new Map<number, number>()
@@ -406,15 +442,16 @@ export function fetchMaterials(characterId?: number): Promise<EsiResult<Material
       mineralPrices.set(mineralTypeId, prices.get(mineralTypeId) ?? 0)
     }
 
-    const byType = new Map<number, MaterialHolding>()
-    for (const row of materialRows) {
+    const byType = new Map<number, AssetHolding>()
+    for (const row of rows) {
       let holding = byType.get(row.type_id)
       if (!holding) {
         holding = {
           typeId: row.type_id,
           typeName: nameOf(row.type_id),
           quantity: 0,
-          rawValue: 0,
+          value: 0,
+          isOre: Boolean(oreComposition(row.type_id)),
           refinedValue: 0,
           locations: []
         }
@@ -422,11 +459,12 @@ export function fetchMaterials(characterId?: number): Promise<EsiResult<Material
       }
       holding.quantity += row.quantity
 
-      let loc = holding.locations.find((l) => l.locationId === row.location_id)
+      const root = roots.get(row.item_id)!
+      let loc = holding.locations.find((l) => l.locationId === root.id)
       if (!loc) {
         loc = {
-          locationId: row.location_id,
-          locationName: nameOf(row.location_id) ?? (row.location_type === 'other' ? 'Player structure' : undefined),
+          locationId: root.id,
+          locationName: locationName(root),
           quantity: 0
         }
         holding.locations.push(loc)
@@ -434,20 +472,20 @@ export function fetchMaterials(characterId?: number): Promise<EsiResult<Material
       loc.quantity += row.quantity
     }
 
-    let totalRawValue = 0
-    let totalRefinedValue = 0
+    let totalValue = 0
     const holdings = [...byType.values()].map((holding) => {
       const unitPrice = prices.get(holding.typeId) ?? 0
-      holding.rawValue = unitPrice * holding.quantity
-      holding.refinedValue = computeRefinedValue(holding.typeId, holding.quantity, mineralPrices)
-      totalRawValue += holding.rawValue
-      totalRefinedValue += holding.refinedValue
+      holding.value = unitPrice * holding.quantity
+      holding.refinedValue = holding.isOre
+        ? computeRefinedValue(holding.typeId, holding.quantity, mineralPrices)
+        : 0
+      totalValue += holding.value
       return holding
     })
 
-    holdings.sort((a, b) => b.rawValue - a.rawValue)
+    holdings.sort((a, b) => b.value - a.value)
 
-    return { holdings, totalRawValue, totalRefinedValue }
+    return { holdings, totalValue, itemTypeCount: holdings.length }
   })
 }
 
