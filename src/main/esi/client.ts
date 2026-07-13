@@ -140,6 +140,33 @@ async function resolveStructureNames(ids: number[]): Promise<void> {
   )
 }
 
+/**
+ * Name a character's own container/ship item ids via /characters/{id}/assets/names.
+ * Used when an item's root location walk ends on a container that is itself an
+ * asset (so we can show "In <container name>"). ESI returns "None" for unnamed
+ * items; those are treated as unresolvable.
+ */
+async function resolveAssetNames(cid: number, ids: number[]): Promise<void> {
+  const unique = [...new Set(ids)].filter(
+    (id) => id > 0 && !nameCache.has(id) && !unresolvableIds.has(id)
+  )
+  for (let i = 0; i < unique.length; i += 1000) {
+    const chunk = unique.slice(i, i + 1000)
+    try {
+      const results = await esi<Array<{ item_id: number; name: string }>>(
+        `/characters/${cid}/assets/names/`,
+        { auth: true, method: 'POST', body: chunk }
+      )
+      for (const r of results) {
+        if (r.name && r.name !== 'None') nameCache.set(r.item_id, r.name)
+        else unresolvableIds.add(r.item_id)
+      }
+    } catch {
+      for (const id of chunk) unresolvableIds.add(id)
+    }
+  }
+}
+
 async function getMarketPrices(): Promise<Map<number, number>> {
   if (marketPrices && Date.now() - marketPricesAt < 10 * 60 * 1000) return marketPrices
   try {
@@ -459,30 +486,64 @@ async function fetchAssetHoldings(
   const byItemId = new Map<number, AssetRow>()
   for (const row of rows) byItemId.set(row.item_id, row)
 
-  // Resolve each row's root (non-nested) location up front.
+  // The active (currently-flown) ship is NOT in the assets list, but its fitted
+  // modules and cargo ARE (their location is the ship's item id). Fetch the
+  // active ship + current location so we can map those to where the ship is.
+  const [activeShip, curLoc, prices] = await Promise.all([
+    esi<{ ship_item_id: number }>(`/characters/${cid}/ship/`, { auth: true }).catch(() => null),
+    esi<{ solar_system_id: number; station_id?: number; structure_id?: number }>(
+      `/characters/${cid}/location/`,
+      { auth: true }
+    ).catch(() => null),
+    getMarketPrices()
+  ])
+  let activeShipRoot: { id: number; type: AssetRow['location_type'] } | null = null
+  if (curLoc) {
+    const id = curLoc.station_id ?? curLoc.structure_id ?? curLoc.solar_system_id
+    const type: AssetRow['location_type'] = curLoc.station_id
+      ? 'station'
+      : curLoc.structure_id
+        ? 'other'
+        : 'solar_system'
+    activeShipRoot = { id, type }
+  }
+
+  // Resolve each row's root (non-nested) location, remapping items fitted to the
+  // active ship to the ship's real location.
   const roots = new Map<number, { id: number; type: AssetRow['location_type'] }>()
-  for (const row of rows) roots.set(row.item_id, rootLocation(row, byItemId))
+  for (const row of rows) {
+    let root = rootLocation(row, byItemId)
+    if (activeShip && activeShipRoot && root.type === 'item' && root.id === activeShip.ship_item_id) {
+      root = activeShipRoot
+    }
+    roots.set(row.item_id, root)
+  }
 
-  const prices = await getMarketPrices()
-
-  // Type ids, NPC station/solar-system ids, and player-structure ids are
-  // resolved as separate batches so the different id spaces (and the two
-  // very different resolution endpoints) never mix.
+  // Resolve names by id space / endpoint: type ids and NPC station/system ids
+  // via /universe/names, player structures via /universe/structures, and any
+  // remaining container/ship item ids via the character-assets names endpoint.
   const typeIds = [...new Set(rows.map((r) => r.type_id))]
-  const rootIds = [...new Set([...roots.values()].map((r) => r.id))]
-  const stationOrSystemIds = rootIds.filter((id) => id < STRUCTURE_ID_THRESHOLD)
-  const structureIds = rootIds.filter((id) => id >= STRUCTURE_ID_THRESHOLD)
+  const rootVals = [...roots.values()]
+  const stationOrSystemIds = rootVals
+    .filter((r) => r.type !== 'item' && r.id < STRUCTURE_ID_THRESHOLD)
+    .map((r) => r.id)
+  const structureIds = rootVals
+    .filter((r) => r.type !== 'item' && r.id >= STRUCTURE_ID_THRESHOLD)
+    .map((r) => r.id)
+  const containerIds = rootVals.filter((r) => r.type === 'item').map((r) => r.id)
   await Promise.all([
     resolveNames(typeIds),
     resolveNames(stationOrSystemIds),
-    resolveStructureNames(structureIds)
+    resolveStructureNames(structureIds),
+    resolveAssetNames(cid, containerIds)
   ])
 
-  // Anything still unresolved (e.g. a structure we don't have docking/scope
-  // access to) falls back to a generic label, then the view's "Location <id>"
-  // fallback.
+  // A resolved container/ship name is shown as "In <name>"; a structure we can't
+  // access falls back to a generic label, then the view's "Location <id>".
   function locationName(loc: { id: number; type: AssetRow['location_type'] }): string | undefined {
-    return nameOf(loc.id) ?? (loc.type === 'other' ? 'Player structure' : undefined)
+    const n = nameOf(loc.id)
+    if (n) return loc.type === 'item' ? `In ${n}` : n
+    return loc.type === 'other' ? 'Player structure' : undefined
   }
 
   // Mineral price lookup for refinedValue (only the 9 tabled minerals).
