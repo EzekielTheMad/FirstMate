@@ -25,6 +25,7 @@ import {
   fetchEconomy,
   fetchMining,
   fetchAssets,
+  fetchMaterials,
   fetchIndustryJobs,
   fetchClones
 } from './esi/client'
@@ -63,6 +64,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   ipcMain.handle('esi:economy', () => fetchEconomy())
   ipcMain.handle('esi:mining', () => fetchMining())
   ipcMain.handle('esi:assets', () => fetchAssets())
+  ipcMain.handle('esi:materials', () => fetchMaterials())
   ipcMain.handle('esi:industry', () => fetchIndustryJobs())
   ipcMain.handle('esi:clones', () => fetchClones())
 

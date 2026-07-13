@@ -53,7 +53,8 @@ export const SCOPE_GROUPS: ScopeGroup[] = [
     label: 'Assets',
     description: 'Assets across stations and structures.',
     scopes: [
-      'esi-assets.read_assets.v1'
+      'esi-assets.read_assets.v1',
+      'esi-universe.read_structures.v1'
     ]
   }
 ]

@@ -323,6 +323,7 @@ export interface FirstMateApi {
     economy: () => Promise<EsiResult<EconomyData>>
     mining: () => Promise<EsiResult<MiningData>>
     assets: () => Promise<EsiResult<AssetsData>>
+    materials: () => Promise<EsiResult<AssetsData>>
     industry: () => Promise<EsiResult<IndustryData>>
     clones: () => Promise<EsiResult<ClonesData>>
   }

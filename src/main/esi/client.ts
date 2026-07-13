@@ -15,7 +15,12 @@ import {
   SkillQueueEntry,
   WalletJournalEntry
 } from '@shared/types'
-import { MINERAL_TYPE_IDS, oreComposition, refinedValue as computeRefinedValue } from '@shared/data/ore-minerals'
+import {
+  MINERAL_TYPE_IDS,
+  isMaterialType,
+  oreComposition,
+  refinedValue as computeRefinedValue
+} from '@shared/data/ore-minerals'
 import { getValidAccessToken, getIdentity, setClearAuthCaches } from '../auth/sso'
 
 const ESI_BASE = 'https://esi.evetech.net/latest'
@@ -110,6 +115,29 @@ async function resolveNames(ids: number[]): Promise<void> {
 function nameOf(id?: number): string | undefined {
   if (!id) return undefined
   return nameCache.get(id)
+}
+
+/**
+ * Resolve player-owned (Upwell) structure ids via /universe/structures/{id}/.
+ * Unlike /universe/names, this is a per-id endpoint that requires the
+ * esi-universe.read_structures.v1 scope AND docking/observer access to the
+ * structure — so on any error (403/404/etc.) we just record the id as
+ * unresolvable rather than retrying it every refresh.
+ */
+async function resolveStructureNames(ids: number[]): Promise<void> {
+  const unique = [...new Set(ids)].filter(
+    (id) => id > 0 && !nameCache.has(id) && !unresolvableIds.has(id)
+  )
+  await Promise.all(
+    unique.map(async (id) => {
+      try {
+        const structure = await esi<{ name: string }>(`/universe/structures/${id}/`, { auth: true })
+        nameCache.set(id, structure.name)
+      } catch {
+        unresolvableIds.add(id)
+      }
+    })
+  )
 }
 
 async function getMarketPrices(): Promise<Map<number, number>> {
@@ -399,93 +427,133 @@ function rootLocation(
   return { id: cur.location_id, type: cur.location_type }
 }
 
+/**
+ * Structure ids (Upwell citadels/engineering complexes/etc., and by extension
+ * the asset "item" location space) are 64-bit ids well above 100 billion.
+ * NPC station ids top out in the low billions and solar system ids are ~8
+ * digits, so this threshold cleanly separates "resolve via /universe/names"
+ * locations from "resolve via /universe/structures/{id}/" locations.
+ */
+const STRUCTURE_ID_THRESHOLD = 100_000_000_000
+
+/**
+ * Shared implementation behind `fetchAssets`/`fetchMaterials`: fetches every
+ * asset page for `cid`, resolves each row's root (non-nested) location, then
+ * aggregates only the rows `includeType` accepts into `AssetHolding`s. Root
+ * locations are always resolved from the FULL row set (not just the included
+ * rows) so nested containers held by excluded items still resolve correctly
+ * were they ever to matter, and so a single location resolution pass serves
+ * both callers without extra ESI calls.
+ */
+async function fetchAssetHoldings(
+  cid: number,
+  includeType: (typeId: number) => boolean
+): Promise<AssetsData> {
+  const first = await fetchAssetsPage(cid, 1)
+  let rows = first.rows
+  for (let page = 2; page <= first.pages; page++) {
+    const next = await fetchAssetsPage(cid, page)
+    rows = rows.concat(next.rows)
+  }
+
+  const byItemId = new Map<number, AssetRow>()
+  for (const row of rows) byItemId.set(row.item_id, row)
+
+  // Resolve each row's root (non-nested) location up front.
+  const roots = new Map<number, { id: number; type: AssetRow['location_type'] }>()
+  for (const row of rows) roots.set(row.item_id, rootLocation(row, byItemId))
+
+  const prices = await getMarketPrices()
+
+  // Type ids, NPC station/solar-system ids, and player-structure ids are
+  // resolved as separate batches so the different id spaces (and the two
+  // very different resolution endpoints) never mix.
+  const typeIds = [...new Set(rows.map((r) => r.type_id))]
+  const rootIds = [...new Set([...roots.values()].map((r) => r.id))]
+  const stationOrSystemIds = rootIds.filter((id) => id < STRUCTURE_ID_THRESHOLD)
+  const structureIds = rootIds.filter((id) => id >= STRUCTURE_ID_THRESHOLD)
+  await Promise.all([
+    resolveNames(typeIds),
+    resolveNames(stationOrSystemIds),
+    resolveStructureNames(structureIds)
+  ])
+
+  // Anything still unresolved (e.g. a structure we don't have docking/scope
+  // access to) falls back to a generic label, then the view's "Location <id>"
+  // fallback.
+  function locationName(loc: { id: number; type: AssetRow['location_type'] }): string | undefined {
+    return nameOf(loc.id) ?? (loc.type === 'other' ? 'Player structure' : undefined)
+  }
+
+  // Mineral price lookup for refinedValue (only the 9 tabled minerals).
+  const mineralPrices = new Map<number, number>()
+  for (const mineralTypeId of Object.values(MINERAL_TYPE_IDS)) {
+    mineralPrices.set(mineralTypeId, prices.get(mineralTypeId) ?? 0)
+  }
+
+  const byType = new Map<number, AssetHolding>()
+  for (const row of rows) {
+    if (!includeType(row.type_id)) continue
+
+    let holding = byType.get(row.type_id)
+    if (!holding) {
+      holding = {
+        typeId: row.type_id,
+        typeName: nameOf(row.type_id),
+        quantity: 0,
+        value: 0,
+        isOre: Boolean(oreComposition(row.type_id)),
+        refinedValue: 0,
+        locations: []
+      }
+      byType.set(row.type_id, holding)
+    }
+    holding.quantity += row.quantity
+
+    const root = roots.get(row.item_id)!
+    let loc = holding.locations.find((l) => l.locationId === root.id)
+    if (!loc) {
+      loc = {
+        locationId: root.id,
+        locationName: locationName(root),
+        quantity: 0
+      }
+      holding.locations.push(loc)
+    }
+    loc.quantity += row.quantity
+  }
+
+  let totalValue = 0
+  const holdings = [...byType.values()].map((holding) => {
+    const unitPrice = prices.get(holding.typeId) ?? 0
+    holding.value = unitPrice * holding.quantity
+    holding.refinedValue = holding.isOre
+      ? computeRefinedValue(holding.typeId, holding.quantity, mineralPrices)
+      : 0
+    totalValue += holding.value
+    return holding
+  })
+
+  holdings.sort((a, b) => b.value - a.value)
+
+  return { holdings, totalValue, itemTypeCount: holdings.length }
+}
+
+/** Non-material gear: ships, modules, ammo, and everything else not tabled as ore/mineral/ice. */
 export function fetchAssets(characterId?: number): Promise<EsiResult<AssetsData>> {
   return wrap(async () => {
     const cid = characterId ?? getIdentity()?.characterId
     if (!cid) throw new Error('Not logged in.')
+    return fetchAssetHoldings(cid, (typeId) => !isMaterialType(typeId))
+  })
+}
 
-    const first = await fetchAssetsPage(cid, 1)
-    let rows = first.rows
-    for (let page = 2; page <= first.pages; page++) {
-      const next = await fetchAssetsPage(cid, page)
-      rows = rows.concat(next.rows)
-    }
-
-    const byItemId = new Map<number, AssetRow>()
-    for (const row of rows) byItemId.set(row.item_id, row)
-
-    // Resolve each row's root (non-nested) location up front.
-    const roots = new Map<number, { id: number; type: AssetRow['location_type'] }>()
-    for (const row of rows) roots.set(row.item_id, rootLocation(row, byItemId))
-
-    const prices = await getMarketPrices()
-
-    // Type ids and root location ids are resolved as separate /universe/names
-    // calls, so an unresolvable structure id can never affect type-name
-    // resolution (resolveNames already isolates bad ids within a call, but
-    // keeping the batches separate avoids mixing the two id spaces at all).
-    const typeIds = [...new Set(rows.map((r) => r.type_id))]
-    const locationIds = [...new Set([...roots.values()].map((r) => r.id))]
-    await Promise.all([resolveNames(typeIds), resolveNames(locationIds)])
-
-    // Stations and solar systems resolve via /universe/names; player-owned
-    // structures generally don't (ESI needs a docking scope for those), so we
-    // label them generically. Anything else unresolved falls through to the
-    // view's "Location <id>" fallback.
-    function locationName(loc: { id: number; type: AssetRow['location_type'] }): string | undefined {
-      return nameOf(loc.id) ?? (loc.type === 'other' ? 'Player structure' : undefined)
-    }
-
-    // Mineral price lookup for refinedValue (only the 9 tabled minerals).
-    const mineralPrices = new Map<number, number>()
-    for (const mineralTypeId of Object.values(MINERAL_TYPE_IDS)) {
-      mineralPrices.set(mineralTypeId, prices.get(mineralTypeId) ?? 0)
-    }
-
-    const byType = new Map<number, AssetHolding>()
-    for (const row of rows) {
-      let holding = byType.get(row.type_id)
-      if (!holding) {
-        holding = {
-          typeId: row.type_id,
-          typeName: nameOf(row.type_id),
-          quantity: 0,
-          value: 0,
-          isOre: Boolean(oreComposition(row.type_id)),
-          refinedValue: 0,
-          locations: []
-        }
-        byType.set(row.type_id, holding)
-      }
-      holding.quantity += row.quantity
-
-      const root = roots.get(row.item_id)!
-      let loc = holding.locations.find((l) => l.locationId === root.id)
-      if (!loc) {
-        loc = {
-          locationId: root.id,
-          locationName: locationName(root),
-          quantity: 0
-        }
-        holding.locations.push(loc)
-      }
-      loc.quantity += row.quantity
-    }
-
-    let totalValue = 0
-    const holdings = [...byType.values()].map((holding) => {
-      const unitPrice = prices.get(holding.typeId) ?? 0
-      holding.value = unitPrice * holding.quantity
-      holding.refinedValue = holding.isOre
-        ? computeRefinedValue(holding.typeId, holding.quantity, mineralPrices)
-        : 0
-      totalValue += holding.value
-      return holding
-    })
-
-    holdings.sort((a, b) => b.value - a.value)
-
-    return { holdings, totalValue, itemTypeCount: holdings.length }
+/** Materials on hand: ore, minerals, and ice held across hangars/ships/containers. */
+export function fetchMaterials(characterId?: number): Promise<EsiResult<AssetsData>> {
+  return wrap(async () => {
+    const cid = characterId ?? getIdentity()?.characterId
+    if (!cid) throw new Error('Not logged in.')
+    return fetchAssetHoldings(cid, isMaterialType)
   })
 }
 
