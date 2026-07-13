@@ -653,9 +653,31 @@ async function buildInventory(cid: number): Promise<InventorySnapshot> {
   // Identify ships: category_id 6 hulls among the (non-stackable) singleton
   // rows, plus the active ship (deduped against a matching row, though in
   // practice the active ship never appears as a row of its own).
-  const singletonTypeIds = rows.filter((r) => r.is_singleton).map((r) => r.type_id)
-  await resolveCategories(singletonTypeIds)
-  const shipRows = rows.filter((r) => r.is_singleton && categoryOf(r.type_id) === SHIP_CATEGORY_ID)
+  //
+  // Only classify singletons that sit LOOSE (in a hangar/hold) — never ones in a
+  // fitting slot or cargo. A ship hull always sits in a hangar, while the bulk of
+  // singletons are fitted modules; skipping those avoids a large burst of
+  // /universe/types + /universe/groups lookups on first load.
+  const IN_SHIP_SLOTS = new Set<ShipSlot>([
+    'High',
+    'Mid',
+    'Low',
+    'Rig',
+    'Subsystem',
+    'Drones',
+    'Fighters',
+    'Cargo'
+  ])
+  const shipCandidateTypeIds = rows
+    .filter((r) => r.is_singleton && !IN_SHIP_SLOTS.has(slotOf(r.location_flag)))
+    .map((r) => r.type_id)
+  await resolveCategories(shipCandidateTypeIds)
+  const shipRows = rows.filter(
+    (r) =>
+      r.is_singleton &&
+      !IN_SHIP_SLOTS.has(slotOf(r.location_flag)) &&
+      categoryOf(r.type_id) === SHIP_CATEGORY_ID
+  )
 
   interface ShipEntry {
     itemId: number
