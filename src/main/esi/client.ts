@@ -480,10 +480,14 @@ export function fetchIndustryJobs(characterId?: number): Promise<EsiResult<Indus
     const cid = characterId ?? getIdentity()?.characterId
     if (!cid) throw new Error('Not logged in.')
 
-    const rows = await esi<IndustryJobRow[]>(
-      `/characters/${cid}/industry/jobs/?include_completed=true`,
-      { auth: true }
-    )
+    // No include_completed: we want CURRENT jobs (in progress or finished but not
+    // yet delivered), not a history of everything ever crafted. Defensively drop
+    // any terminal states in case the endpoint still returns some.
+    const all = await esi<IndustryJobRow[]>(`/characters/${cid}/industry/jobs/`, { auth: true })
+    const rows = all.filter((r) => {
+      const s = r.status?.toLowerCase()
+      return s !== 'delivered' && s !== 'cancelled' && s !== 'reverted'
+    })
 
     await resolveNames([
       ...rows.map((r) => r.blueprint_type_id),
@@ -504,7 +508,8 @@ export function fetchIndustryJobs(characterId?: number): Promise<EsiResult<Indus
       runs: r.runs
     }))
 
-    jobs.sort((a, b) => (a.endDate < b.endDate ? 1 : -1))
+    // Soonest-to-finish (and already-ready) jobs first.
+    jobs.sort((a, b) => (a.endDate < b.endDate ? -1 : 1))
     return { jobs }
   })
 }
