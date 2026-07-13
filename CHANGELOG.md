@@ -3,6 +3,19 @@
 All notable changes to FirstMate are documented here. This file is the source
 of the release notes shown in the app's updater.
 
+## [0.1.10] - 2026-07-13
+
+### Fixed
+- Ships stored in a **player structure** (citadel) now show that structure's
+  name instead of a raw id number. (Needs the structures permission — log out
+  and back in once if you haven't yet.)
+- A ship's **custom name** (nickname) is shown when you've set one; your active
+  ship's name now resolves too.
+
+### Changed
+- The fitting view now has clearer **slot section headers** (High / Mid / Low /
+  Rig / Cargo / …) with a divider bar and a per-section item count.
+
 ## [0.1.9] - 2026-07-13
 
 ### Added
