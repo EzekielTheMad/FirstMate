@@ -171,6 +171,44 @@ export interface AssetsData {
   itemTypeCount: number
 }
 
+export type ShipSlot =
+  | 'High'
+  | 'Mid'
+  | 'Low'
+  | 'Rig'
+  | 'Subsystem'
+  | 'Drones'
+  | 'Fighters'
+  | 'Cargo'
+  | 'Hold'
+  | 'Other'
+
+export interface FittedItem {
+  typeId: number
+  typeName?: string
+  quantity: number
+  slot: ShipSlot
+}
+
+export interface ShipInfo {
+  itemId: number
+  typeId: number
+  typeName?: string
+  /** Custom (player-given) ship name, if any — falls back to `typeName` in the UI. */
+  name?: string
+  isActive: boolean
+  locationId: number
+  locationName?: string
+  /** Hull price + the market value of everything fitted/stowed aboard. */
+  value: number
+  fittings: FittedItem[]
+}
+
+export interface ShipsData {
+  ships: ShipInfo[]
+  totalValue: number
+}
+
 export interface IndustryJob {
   jobId: number
   activity: string
@@ -324,6 +362,7 @@ export interface FirstMateApi {
     mining: () => Promise<EsiResult<MiningData>>
     assets: () => Promise<EsiResult<AssetsData>>
     materials: () => Promise<EsiResult<AssetsData>>
+    ships: () => Promise<EsiResult<ShipsData>>
     industry: () => Promise<EsiResult<IndustryData>>
     clones: () => Promise<EsiResult<ClonesData>>
   }
