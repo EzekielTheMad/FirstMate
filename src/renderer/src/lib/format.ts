@@ -73,8 +73,17 @@ export function renderMarkdown(md: string): string {
   const lines = md.replace(/\r\n/g, '\n').split('\n')
   const html: string[] = []
   let listType: 'ul' | 'ol' | null = null
+  // The current open block being accumulated, so soft-wrapped (hard-newline)
+  // markdown joins into one list item / paragraph instead of breaking apart.
+  let block: { kind: 'li' | 'p'; text: string } | null = null
 
+  const flush = (): void => {
+    if (!block) return
+    html.push(block.kind === 'li' ? `<li>${inline(block.text)}</li>` : `<p>${inline(block.text)}</p>`)
+    block = null
+  }
   const closeList = (): void => {
+    flush()
     if (listType) {
       html.push(`</${listType}>`)
       listType = null
@@ -83,11 +92,12 @@ export function renderMarkdown(md: string): string {
 
   for (const raw of lines) {
     const line = raw.trimEnd()
-    if (!line.trim()) {
+    const trimmed = line.trim()
+    if (!trimmed) {
       closeList()
       continue
     }
-    if (/^---+$/.test(line.trim())) {
+    if (/^---+$/.test(trimmed)) {
       closeList()
       html.push('<hr/>')
       continue
@@ -95,32 +105,34 @@ export function renderMarkdown(md: string): string {
     const h = line.match(/^(#{1,3})\s+(.*)$/)
     if (h) {
       closeList()
-      const level = h[1].length
-      html.push(`<h${level}>${inline(h[2])}</h${level}>`)
+      html.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`)
       continue
     }
     const ol = line.match(/^\s*\d+\.\s+(.*)$/)
     if (ol) {
+      flush()
       if (listType !== 'ol') {
         closeList()
         html.push('<ol>')
         listType = 'ol'
       }
-      html.push(`<li>${inline(ol[1])}</li>`)
+      block = { kind: 'li', text: ol[1] }
       continue
     }
     const ul = line.match(/^\s*[-*]\s+(.*)$/)
     if (ul) {
+      flush()
       if (listType !== 'ul') {
         closeList()
         html.push('<ul>')
         listType = 'ul'
       }
-      html.push(`<li>${inline(ul[1])}</li>`)
+      block = { kind: 'li', text: ul[1] }
       continue
     }
-    closeList()
-    html.push(`<p>${inline(line)}</p>`)
+    // Continuation line: append to the open block (list item or paragraph).
+    if (block) block.text += ' ' + trimmed
+    else block = { kind: 'p', text: trimmed }
   }
   closeList()
   return html.join('\n')
