@@ -3,6 +3,16 @@
 All notable changes to FirstMate are documented here. This file is the source
 of the release notes shown in the app's updater.
 
+## [0.1.4] - 2026-07-13
+
+### Fixed
+- **Industry** now shows only your **active** jobs (in progress or ready to
+  deliver) instead of a history of everything you've crafted — delivered jobs no
+  longer appear, and finished jobs are labeled "Ready to deliver" rather than
+  "Ready." Countdowns tick down live and jobs flip to ready at their end time on
+  their own. (Jobs you start or deliver in-game still reflect at EVE's ~5-minute
+  data refresh, or immediately via the ↻ button.)
+
 ## [0.1.3] - 2026-07-12
 
 ### Added
