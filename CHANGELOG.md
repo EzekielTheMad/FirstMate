@@ -3,6 +3,15 @@
 All notable changes to FirstMate are documented here. This file is the source
 of the release notes shown in the app's updater.
 
+## [0.1.6] - 2026-07-13
+
+### Changed
+- The **Assets** tab is now a full asset browser. It shows *all* your items (not
+  just ore and minerals), grouped by type with a per-location breakdown and a
+  total value, plus **search** and **sort** (by value, quantity, or name).
+  Locations resolve through ship/container nesting to the actual station or
+  structure, and ores still show their reprocessing tooltip and refined value.
+
 ## [0.1.5] - 2026-07-13
 
 ### Fixed
