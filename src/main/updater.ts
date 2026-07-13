@@ -64,20 +64,23 @@ function wire(): void {
   autoUpdater.on('checking-for-update', () => set({ status: 'checking', error: undefined }))
   autoUpdater.on('update-available', (info) => {
     suppressNextError = false
-    const inline =
-      typeof info.releaseNotes === 'string' && info.releaseNotes.trim()
-        ? info.releaseNotes.trim()
-        : undefined
-    // Surface availability immediately; enrich release notes without blocking so a
+    // Surface availability immediately; fill in release notes without blocking so a
     // slow/stalled GitHub fetch can never wedge the state machine in 'checking'.
-    set({ status: 'available', newVersion: info.version, releaseNotes: inline })
-    if (!inline) {
-      void fetchReleaseNotes(info.version).then((notes) => {
-        if (notes && state.newVersion === info.version && !state.releaseNotes) {
-          set({ releaseNotes: notes })
-        }
-      })
-    }
+    set({ status: 'available', newVersion: info.version, releaseNotes: undefined })
+    // Prefer the GitHub release's raw markdown body — the renderer renders
+    // markdown. electron-updater's info.releaseNotes is pre-rendered HTML, which
+    // the markdown renderer would escape and show as literal tags. Fall back to
+    // info.releaseNotes only if the API body isn't available and it looks like
+    // plain text (no HTML tags).
+    void fetchReleaseNotes(info.version).then((notes) => {
+      if (state.newVersion !== info.version) return
+      const fallback =
+        typeof info.releaseNotes === 'string' && !/<[a-z][\s\S]*>/i.test(info.releaseNotes)
+          ? info.releaseNotes.trim()
+          : undefined
+      const md = notes ?? fallback
+      if (md) set({ releaseNotes: md })
+    })
   })
   autoUpdater.on('update-not-available', () => {
     suppressNextError = false
