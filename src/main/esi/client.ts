@@ -165,7 +165,8 @@ async function resolveStructureNames(ids: number[]): Promise<void> {
  * asset (so we can show "In <container name>"). ESI returns "None" for unnamed
  * items; those are treated as unresolvable.
  */
-async function resolveAssetNames(cid: number, ids: number[]): Promise<void> {
+async function resolveAssetNames(cid: number, ids: number[]): Promise<Set<number>> {
+  const named = new Set<number>()
   const unique = [...new Set(ids)].filter(
     (id) => id > 0 && !nameCache.has(id) && !unresolvableIds.has(id)
   )
@@ -177,13 +178,18 @@ async function resolveAssetNames(cid: number, ids: number[]): Promise<void> {
         { auth: true, method: 'POST', body: chunk }
       )
       for (const r of results) {
-        if (r.name && r.name !== 'None') nameCache.set(r.item_id, r.name)
-        else unresolvableIds.add(r.item_id)
+        if (r.name && r.name !== 'None') {
+          nameCache.set(r.item_id, r.name)
+          named.add(r.item_id)
+        }
+        // Not marking unnamed items unresolvable: a big id the assets/names
+        // endpoint doesn't own may still be a player structure to try next.
       }
     } catch {
-      for (const id of chunk) unresolvableIds.add(id)
+      /* leave for the structure resolver / fallback label */
     }
   }
+  return named
 }
 
 /** Ships are category_id 6. Used to tell hulls apart from modules/ammo/etc. */
@@ -683,6 +689,7 @@ async function buildInventory(cid: number): Promise<InventorySnapshot> {
     itemId: number
     typeId: number
     isActive: boolean
+    name?: string
   }
   const shipEntries: ShipEntry[] = shipRows.map((r) => ({
     itemId: r.item_id,
@@ -691,8 +698,17 @@ async function buildInventory(cid: number): Promise<InventorySnapshot> {
   }))
   if (activeShip) {
     const existing = shipEntries.find((s) => s.itemId === activeShip.ship_item_id)
-    if (existing) existing.isActive = true
-    else shipEntries.push({ itemId: activeShip.ship_item_id, typeId: activeShip.ship_type_id, isActive: true })
+    if (existing) {
+      existing.isActive = true
+      existing.name = activeShip.ship_name
+    } else {
+      shipEntries.push({
+        itemId: activeShip.ship_item_id,
+        typeId: activeShip.ship_type_id,
+        isActive: true,
+        name: activeShip.ship_name
+      })
+    }
   }
   const shipItemIds = new Set(shipEntries.map((s) => s.itemId))
 
@@ -749,26 +765,27 @@ async function buildInventory(cid: number): Promise<InventorySnapshot> {
   if (activeShip) typeIds.push(activeShip.ship_type_id)
   const rootVals = [...roots.values()]
   if (activeShipRoot) rootVals.push(activeShipRoot)
-  const stationOrSystemIds = rootVals
-    .filter((r) => r.type !== 'item' && r.id < STRUCTURE_ID_THRESHOLD)
-    .map((r) => r.id)
-  const structureIds = rootVals
-    .filter((r) => r.type !== 'item' && r.id >= STRUCTURE_ID_THRESHOLD)
-    .map((r) => r.id)
-  const containerIds = rootVals.filter((r) => r.type === 'item').map((r) => r.id)
+  // NPC stations + solar systems have small ids. Player structures (citadels)
+  // AND the character's own containers/ships have large ids and can arrive as
+  // either an 'item' or 'other' root type — so we can't split them by type.
+  // Name the character's own items first (assets/names), then try
+  // /universe/structures for any large id that endpoint didn't own.
+  const smallIds = rootVals.filter((r) => r.id > 0 && r.id < STRUCTURE_ID_THRESHOLD).map((r) => r.id)
+  const bigIds = [...new Set(rootVals.filter((r) => r.id >= STRUCTURE_ID_THRESHOLD).map((r) => r.id))]
+  const containerNamed = await resolveAssetNames(cid, [...bigIds, ...shipItemIds])
   await Promise.all([
     resolveNames(typeIds),
-    resolveNames(stationOrSystemIds),
-    resolveStructureNames(structureIds),
-    resolveAssetNames(cid, [...containerIds, ...shipItemIds])
+    resolveNames(smallIds),
+    resolveStructureNames(bigIds)
   ])
 
-  // A resolved container/ship name is shown as "In <name>"; a structure we can't
-  // access falls back to a generic label, then the view's "Location <id>".
+  // A container/ship the character owns is shown as "In <name>"; a resolved
+  // station/structure plainly; an unresolved large id (a structure we can't
+  // access) as a generic label, then the view's "Location <id>".
   function locationName(loc: { id: number; type: AssetRow['location_type'] }): string | undefined {
     const n = nameOf(loc.id)
-    if (n) return loc.type === 'item' ? `In ${n}` : n
-    return loc.type === 'other' ? 'Player structure' : undefined
+    if (n) return containerNamed.has(loc.id) ? `In ${n}` : n
+    return loc.id >= STRUCTURE_ID_THRESHOLD ? 'Player structure' : undefined
   }
 
   // Mineral price lookup for refinedValue (only the 9 tabled minerals).
@@ -820,7 +837,7 @@ async function buildInventory(cid: number): Promise<InventorySnapshot> {
       itemId: entry.itemId,
       typeId: entry.typeId,
       typeName: nameOf(entry.typeId),
-      name: nameOf(entry.itemId),
+      name: nameOf(entry.itemId) ?? entry.name,
       isActive: entry.isActive,
       locationId: loc.id,
       locationName: locationName(loc),

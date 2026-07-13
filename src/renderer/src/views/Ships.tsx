@@ -176,11 +176,9 @@ function ShipRow({
           ) : (
             groups.map((g) => (
               <div key={g.slot} style={{ marginBottom: 6 }}>
-                <div
-                  className="dim"
-                  style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: 0.4 }}
-                >
+                <div className="slot-bar">
                   {g.slot}
+                  <span className="slot-bar-count">{g.items.length}</span>
                 </div>
                 {g.items.map((f, i) => (
                   <div
