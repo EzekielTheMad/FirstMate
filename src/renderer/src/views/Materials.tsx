@@ -1,14 +1,80 @@
 import { useMemo } from 'react'
-import { useAsync } from '../lib/hooks'
+import { useAsync, AsyncState } from '../lib/hooks'
 import { isk, num, shortDate } from '../lib/format'
-import { Panel, Stat, Loader, ErrorBox, EmptyState } from '../components/ui'
-import type { EsiResult, MiningData } from '@shared/types'
+import { Panel, Stat, Loader, ErrorBox, EmptyState, UpdatedAgo } from '../components/ui'
+import { HoldingsList } from '../components/HoldingsList'
+import type { AssetsData, EsiResult, MiningData } from '@shared/types'
 
-export function Mining(): JSX.Element {
-  const { loading, data, error, reload } = useAsync<EsiResult<MiningData>>(() =>
-    window.firstmate.esi.mining()
+export function Materials({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.Element {
+  const materials = useAsync<EsiResult<AssetsData>>(
+    () => window.firstmate.esi.materials(),
+    [],
+    autoRefreshMs
   )
+  const mining = useAsync<EsiResult<MiningData>>(() => window.firstmate.esi.mining())
 
+  return (
+    <>
+      <MaterialsOnHand {...materials} />
+      <MiningLedger {...mining} />
+    </>
+  )
+}
+
+function MaterialsOnHand({
+  loading,
+  data,
+  error,
+  reload,
+  lastUpdatedAt
+}: AsyncState<EsiResult<AssetsData>>): JSX.Element {
+  if (loading) return <Loader label="Appraising materials on hand…" />
+  if (error) return <ErrorBox message={error} onRetry={reload} />
+  if (!data?.ok || !data.data) {
+    return <ErrorBox message={data?.error ?? 'Could not load materials data.'} onRetry={reload} />
+  }
+
+  const m = data.data
+
+  return (
+    <>
+      <Panel
+        title="Materials on Hand"
+        actions={
+          <>
+            <UpdatedAgo at={lastUpdatedAt} />
+            <button className="btn sm" onClick={reload}>
+              ↻
+            </button>
+          </>
+        }
+      >
+        <div className="grid-2">
+          <Stat label="Total Value" value={isk(m.totalValue, true)} sub="current market price" tone="amber" />
+          <Stat label="Item Types" value={num(m.itemTypeCount)} sub="distinct types held" />
+        </div>
+      </Panel>
+
+      <Panel title="Holdings">
+        {m.holdings.length === 0 ? (
+          <EmptyState title="No materials found">
+            Ore, minerals, and ice held across your hangars, ships, and containers will appear
+            here. Ships, modules, and other gear are tracked in <strong>Assets</strong>.
+          </EmptyState>
+        ) : (
+          <HoldingsList holdings={m.holdings} />
+        )}
+      </Panel>
+    </>
+  )
+}
+
+function MiningLedger({
+  loading,
+  data,
+  error,
+  reload
+}: AsyncState<EsiResult<MiningData>>): JSX.Element {
   const dateSpan = useMemo(() => {
     const entries = data?.data?.entries
     if (!entries || entries.length === 0) return undefined
@@ -53,8 +119,8 @@ export function Mining(): JSX.Element {
             ? `Ledger entries span ${shortDate(dateSpan.earliest)} – ${shortDate(dateSpan.latest)}. `
             : ''}
           This is your recent mining activity, not current ore holdings — see{' '}
-          <strong>Assets</strong> for what you have on hand. Value estimates use ESI average
-          market prices — actual refined/sell value will vary.
+          <strong>Materials on Hand</strong> above for what you have on hand. Value estimates use
+          ESI average market prices — actual refined/sell value will vary.
         </div>
       </Panel>
 

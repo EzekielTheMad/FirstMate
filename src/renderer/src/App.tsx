@@ -5,7 +5,7 @@ import { Dashboard } from './views/Dashboard'
 import { Exploration } from './views/Exploration'
 import { Economy } from './views/Economy'
 import { Assets } from './views/Assets'
-import { Mining } from './views/Mining'
+import { Materials } from './views/Materials'
 import { Industry } from './views/Industry'
 import { Combat } from './views/Combat'
 import { Clones } from './views/Clones'
@@ -20,7 +20,7 @@ type TabId =
   | 'exploration'
   | 'economy'
   | 'assets'
-  | 'mining'
+  | 'materials'
   | 'industry'
   | 'combat'
   | 'clones'
@@ -40,7 +40,7 @@ const TABS: Tab[] = [
   { id: 'exploration', label: 'Explore', icon: '🌀' },
   { id: 'economy', label: 'Economy', icon: '💰', needsAuth: true },
   { id: 'assets', label: 'Assets', icon: '📦', needsAuth: true },
-  { id: 'mining', label: 'Mining', icon: '⛏', needsAuth: true },
+  { id: 'materials', label: 'Materials', icon: '⛏', needsAuth: true },
   { id: 'industry', label: 'Industry', icon: '🏭', needsAuth: true },
   { id: 'combat', label: 'Combat', icon: '🎯' },
   { id: 'clones', label: 'Clones', icon: '🧬', needsAuth: true },
@@ -214,8 +214,8 @@ function TabContent({
       return <Economy autoRefreshMs={autoRefreshMs} />
     case 'assets':
       return <Assets autoRefreshMs={autoRefreshMs} />
-    case 'mining':
-      return <Mining />
+    case 'materials':
+      return <Materials autoRefreshMs={autoRefreshMs} />
     case 'industry':
       return <Industry autoRefreshMs={autoRefreshMs} />
     case 'combat':
