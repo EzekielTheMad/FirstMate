@@ -5,6 +5,7 @@ import {
   DashboardData,
   EconomyData,
   EsiResult,
+  FittedItem,
   ImplantInfo,
   IndustryData,
   IndustryJob,
@@ -12,6 +13,9 @@ import {
   MarketOrder,
   MiningData,
   MiningLedgerEntry,
+  ShipInfo,
+  ShipSlot,
+  ShipsData,
   SkillQueueEntry,
   WalletJournalEntry
 } from '@shared/types'
@@ -34,11 +38,26 @@ const unresolvableIds = new Set<number>()
 let marketPrices: Map<number, number> | null = null
 let marketPricesAt = 0
 
+// ---- Type -> group -> category classification cache ------------------------
+// Used to detect ships (category_id 6) among a character's assets. These map
+// small integer ids and are effectively static SDE data, so they're cached for
+// the life of the process (cleared only on logout/re-auth like everything else
+// here) rather than on the short inventory TTL below.
+const typeGroup = new Map<number, number>()
+const groupCategory = new Map<number, number>()
+
+/** Single-entry (per logged-in character) cache of the combined ships/assets pass. */
+let inventoryCache: { cid: number; at: number; data: InventorySnapshot } | null = null
+const INVENTORY_TTL_MS = 2 * 60 * 1000
+
 setClearAuthCaches(() => {
   nameCache.clear()
   unresolvableIds.clear()
   marketPrices = null
   marketPricesAt = 0
+  typeGroup.clear()
+  groupCategory.clear()
+  inventoryCache = null
 })
 
 interface EsiOptions {
@@ -165,6 +184,42 @@ async function resolveAssetNames(cid: number, ids: number[]): Promise<void> {
       for (const id of chunk) unresolvableIds.add(id)
     }
   }
+}
+
+/** Ships are category_id 6. Used to tell hulls apart from modules/ammo/etc. */
+const SHIP_CATEGORY_ID = 6
+
+/** Resolve a single type's category_id via /universe/types/{id}/ -> /universe/groups/{id}/. */
+async function resolveCategory(typeId: number): Promise<number | undefined> {
+  if (!typeGroup.has(typeId)) {
+    try {
+      const t = await esi<{ group_id: number }>(`/universe/types/${typeId}/`)
+      typeGroup.set(typeId, t.group_id)
+    } catch {
+      return undefined
+    }
+  }
+  const gid = typeGroup.get(typeId)!
+  if (!groupCategory.has(gid)) {
+    try {
+      const g = await esi<{ category_id: number }>(`/universe/groups/${gid}/`)
+      groupCategory.set(gid, g.category_id)
+    } catch {
+      return undefined
+    }
+  }
+  return groupCategory.get(gid)
+}
+
+/** Warm the type/group/category caches for a batch of type ids, in parallel. */
+async function resolveCategories(typeIds: number[]): Promise<void> {
+  await Promise.all([...new Set(typeIds)].map((id) => resolveCategory(id)))
+}
+
+/** Synchronous lookup after `resolveCategories` has warmed the caches. */
+function categoryOf(typeId: number): number | undefined {
+  const gid = typeGroup.get(typeId)
+  return gid == null ? undefined : groupCategory.get(gid)
 }
 
 async function getMarketPrices(): Promise<Map<number, number>> {
@@ -464,98 +519,21 @@ function rootLocation(
 const STRUCTURE_ID_THRESHOLD = 100_000_000_000
 
 /**
- * Shared implementation behind `fetchAssets`/`fetchMaterials`: fetches every
- * asset page for `cid`, resolves each row's root (non-nested) location, then
- * aggregates only the rows `includeType` accepts into `AssetHolding`s. Root
- * locations are always resolved from the FULL row set (not just the included
- * rows) so nested containers held by excluded items still resolve correctly
- * were they ever to matter, and so a single location resolution pass serves
- * both callers without extra ESI calls.
+ * Aggregates a (pre-filtered) set of asset rows into `AssetHolding`s, grouping
+ * by type and, within a type, by root location. Shared by the gear and
+ * materials aggregation passes in `buildInventory` — both hand it a different
+ * row subset but the same `roots`/`prices`/`mineralPrices`/`locationName`
+ * built once for the whole inventory.
  */
-async function fetchAssetHoldings(
-  cid: number,
-  includeType: (typeId: number) => boolean
-): Promise<AssetsData> {
-  const first = await fetchAssetsPage(cid, 1)
-  let rows = first.rows
-  for (let page = 2; page <= first.pages; page++) {
-    const next = await fetchAssetsPage(cid, page)
-    rows = rows.concat(next.rows)
-  }
-
-  const byItemId = new Map<number, AssetRow>()
-  for (const row of rows) byItemId.set(row.item_id, row)
-
-  // The active (currently-flown) ship is NOT in the assets list, but its fitted
-  // modules and cargo ARE (their location is the ship's item id). Fetch the
-  // active ship + current location so we can map those to where the ship is.
-  const [activeShip, curLoc, prices] = await Promise.all([
-    esi<{ ship_item_id: number }>(`/characters/${cid}/ship/`, { auth: true }).catch(() => null),
-    esi<{ solar_system_id: number; station_id?: number; structure_id?: number }>(
-      `/characters/${cid}/location/`,
-      { auth: true }
-    ).catch(() => null),
-    getMarketPrices()
-  ])
-  let activeShipRoot: { id: number; type: AssetRow['location_type'] } | null = null
-  if (curLoc) {
-    const id = curLoc.station_id ?? curLoc.structure_id ?? curLoc.solar_system_id
-    const type: AssetRow['location_type'] = curLoc.station_id
-      ? 'station'
-      : curLoc.structure_id
-        ? 'other'
-        : 'solar_system'
-    activeShipRoot = { id, type }
-  }
-
-  // Resolve each row's root (non-nested) location, remapping items fitted to the
-  // active ship to the ship's real location.
-  const roots = new Map<number, { id: number; type: AssetRow['location_type'] }>()
-  for (const row of rows) {
-    let root = rootLocation(row, byItemId)
-    if (activeShip && activeShipRoot && root.type === 'item' && root.id === activeShip.ship_item_id) {
-      root = activeShipRoot
-    }
-    roots.set(row.item_id, root)
-  }
-
-  // Resolve names by id space / endpoint: type ids and NPC station/system ids
-  // via /universe/names, player structures via /universe/structures, and any
-  // remaining container/ship item ids via the character-assets names endpoint.
-  const typeIds = [...new Set(rows.map((r) => r.type_id))]
-  const rootVals = [...roots.values()]
-  const stationOrSystemIds = rootVals
-    .filter((r) => r.type !== 'item' && r.id < STRUCTURE_ID_THRESHOLD)
-    .map((r) => r.id)
-  const structureIds = rootVals
-    .filter((r) => r.type !== 'item' && r.id >= STRUCTURE_ID_THRESHOLD)
-    .map((r) => r.id)
-  const containerIds = rootVals.filter((r) => r.type === 'item').map((r) => r.id)
-  await Promise.all([
-    resolveNames(typeIds),
-    resolveNames(stationOrSystemIds),
-    resolveStructureNames(structureIds),
-    resolveAssetNames(cid, containerIds)
-  ])
-
-  // A resolved container/ship name is shown as "In <name>"; a structure we can't
-  // access falls back to a generic label, then the view's "Location <id>".
-  function locationName(loc: { id: number; type: AssetRow['location_type'] }): string | undefined {
-    const n = nameOf(loc.id)
-    if (n) return loc.type === 'item' ? `In ${n}` : n
-    return loc.type === 'other' ? 'Player structure' : undefined
-  }
-
-  // Mineral price lookup for refinedValue (only the 9 tabled minerals).
-  const mineralPrices = new Map<number, number>()
-  for (const mineralTypeId of Object.values(MINERAL_TYPE_IDS)) {
-    mineralPrices.set(mineralTypeId, prices.get(mineralTypeId) ?? 0)
-  }
-
+function aggregateHoldings(
+  rows: AssetRow[],
+  roots: Map<number, { id: number; type: AssetRow['location_type'] }>,
+  prices: Map<number, number>,
+  mineralPrices: Map<number, number>,
+  locationName: (loc: { id: number; type: AssetRow['location_type'] }) => string | undefined
+): AssetsData {
   const byType = new Map<number, AssetHolding>()
   for (const row of rows) {
-    if (!includeType(row.type_id)) continue
-
     let holding = byType.get(row.type_id)
     if (!holding) {
       holding = {
@@ -600,21 +578,292 @@ async function fetchAssetHoldings(
   return { holdings, totalValue, itemTypeCount: holdings.length }
 }
 
-/** Non-material gear: ships, modules, ammo, and everything else not tabled as ore/mineral/ice. */
+/** Classify a fitted/stowed item's slot from its `location_flag`. */
+function slotOf(flag: string): ShipSlot {
+  if (/^HiSlot/.test(flag)) return 'High'
+  if (/^MedSlot/.test(flag)) return 'Mid'
+  if (/^LoSlot/.test(flag)) return 'Low'
+  if (/^RigSlot/.test(flag)) return 'Rig'
+  if (/^SubSystemSlot/.test(flag)) return 'Subsystem'
+  if (flag === 'DroneBay') return 'Drones'
+  if (flag === 'FighterBay' || /^FighterTube/.test(flag)) return 'Fighters'
+  if (flag === 'Cargo') return 'Cargo'
+  if (/Hold|Hangar/.test(flag)) return 'Hold'
+  return 'Other'
+}
+
+interface InventorySnapshot {
+  ships: ShipInfo[]
+  gear: AssetHolding[]
+  materials: AssetHolding[]
+  totalGearValue: number
+  totalMaterialValue: number
+  totalShipsValue: number
+  gearTypeCount: number
+  materialTypeCount: number
+}
+
+/**
+ * Single heavy pass over a character's full asset list, shared by
+ * `fetchShips`/`fetchAssets`/`fetchMaterials` (see `getInventory` for the
+ * short-TTL cache wrapper around this). Splits assets into:
+ *  - ships (hulls, category_id 6) with their fittings/cargo/drones nested
+ *    underneath them, including the currently-flown ship (which ESI omits
+ *    from `/assets/` entirely — only its fitted/stowed contents show up
+ *    there, keyed by the ship's item id as their location).
+ *  - gear: everything else not inside a ship and not itself a ship hull.
+ *  - materials: the ore/mineral/ice subset of gear (see `isMaterialType`).
+ */
+async function buildInventory(cid: number): Promise<InventorySnapshot> {
+  const first = await fetchAssetsPage(cid, 1)
+  let rows = first.rows
+  for (let page = 2; page <= first.pages; page++) {
+    const next = await fetchAssetsPage(cid, page)
+    rows = rows.concat(next.rows)
+  }
+
+  const byItemId = new Map<number, AssetRow>()
+  for (const row of rows) byItemId.set(row.item_id, row)
+
+  // The active (currently-flown) ship is NOT in the assets list, but its fitted
+  // modules and cargo ARE (their location is the ship's item id). Fetch the
+  // active ship + current location so we can map those to where the ship is.
+  const [activeShip, curLoc, prices] = await Promise.all([
+    esi<{ ship_item_id: number; ship_type_id: number; ship_name: string }>(
+      `/characters/${cid}/ship/`,
+      { auth: true }
+    ).catch(() => null),
+    esi<{ solar_system_id: number; station_id?: number; structure_id?: number }>(
+      `/characters/${cid}/location/`,
+      { auth: true }
+    ).catch(() => null),
+    getMarketPrices()
+  ])
+  let activeShipRoot: { id: number; type: AssetRow['location_type'] } | null = null
+  if (curLoc) {
+    const id = curLoc.station_id ?? curLoc.structure_id ?? curLoc.solar_system_id
+    const type: AssetRow['location_type'] = curLoc.station_id
+      ? 'station'
+      : curLoc.structure_id
+        ? 'other'
+        : 'solar_system'
+    activeShipRoot = { id, type }
+  }
+
+  // Identify ships: category_id 6 hulls among the (non-stackable) singleton
+  // rows, plus the active ship (deduped against a matching row, though in
+  // practice the active ship never appears as a row of its own).
+  const singletonTypeIds = rows.filter((r) => r.is_singleton).map((r) => r.type_id)
+  await resolveCategories(singletonTypeIds)
+  const shipRows = rows.filter((r) => r.is_singleton && categoryOf(r.type_id) === SHIP_CATEGORY_ID)
+
+  interface ShipEntry {
+    itemId: number
+    typeId: number
+    isActive: boolean
+  }
+  const shipEntries: ShipEntry[] = shipRows.map((r) => ({
+    itemId: r.item_id,
+    typeId: r.type_id,
+    isActive: false
+  }))
+  if (activeShip) {
+    const existing = shipEntries.find((s) => s.itemId === activeShip.ship_item_id)
+    if (existing) existing.isActive = true
+    else shipEntries.push({ itemId: activeShip.ship_item_id, typeId: activeShip.ship_type_id, isActive: true })
+  }
+  const shipItemIds = new Set(shipEntries.map((s) => s.itemId))
+
+  // In-ship membership: walk each row's location chain looking for the nearest
+  // ancestor (or the row's own direct location) that is a ship item id. This is
+  // deliberately a different walk than `rootLocation` below — it stops as soon
+  // as it finds a ship, rather than continuing all the way to a station/system,
+  // and it also catches the active ship (whose item id is never itself a row in
+  // `byItemId`, so the ordinary root walk can't "see" it as a stopping point).
+  function findOwningShip(row: AssetRow): number | undefined {
+    let curId = row.location_id
+    let curType = row.location_type
+    const seen = new Set<number>([row.item_id])
+    let hops = 0
+    while (hops < 50) {
+      if (shipItemIds.has(curId)) return curId
+      if (curType !== 'item' || seen.has(curId)) return undefined
+      seen.add(curId)
+      const parent = byItemId.get(curId)
+      if (!parent) return undefined
+      curId = parent.location_id
+      curType = parent.location_type
+      hops++
+    }
+    return undefined
+  }
+  const rowShip = new Map<number, number>()
+  for (const row of rows) {
+    const sid = findOwningShip(row)
+    if (sid !== undefined) rowShip.set(row.item_id, sid)
+  }
+
+  // Root (non-nested) location for every row — a ship's own row resolves to
+  // wherever the ship sits (station/structure/system), which doubles as that
+  // ship's displayed location. Items fitted to the ACTIVE ship are remapped to
+  // the active ship's real (fetched) location, same as before this file grew a
+  // Ships view.
+  const roots = new Map<number, { id: number; type: AssetRow['location_type'] }>()
+  for (const row of rows) {
+    let root = rootLocation(row, byItemId)
+    if (activeShip && activeShipRoot && root.type === 'item' && root.id === activeShip.ship_item_id) {
+      root = activeShipRoot
+    }
+    roots.set(row.item_id, root)
+  }
+
+  // Resolve names by id space / endpoint: type ids (incl. the active ship's
+  // hull type, which has no row of its own) via /universe/names, NPC
+  // station/system ids via /universe/names, player structures via
+  // /universe/structures, and ship/container custom names via the
+  // character-assets names endpoint. The active ship's location is included
+  // even when nothing is fitted to it (so it still resolves a name).
+  const typeIds = [...new Set(rows.map((r) => r.type_id))]
+  if (activeShip) typeIds.push(activeShip.ship_type_id)
+  const rootVals = [...roots.values()]
+  if (activeShipRoot) rootVals.push(activeShipRoot)
+  const stationOrSystemIds = rootVals
+    .filter((r) => r.type !== 'item' && r.id < STRUCTURE_ID_THRESHOLD)
+    .map((r) => r.id)
+  const structureIds = rootVals
+    .filter((r) => r.type !== 'item' && r.id >= STRUCTURE_ID_THRESHOLD)
+    .map((r) => r.id)
+  const containerIds = rootVals.filter((r) => r.type === 'item').map((r) => r.id)
+  await Promise.all([
+    resolveNames(typeIds),
+    resolveNames(stationOrSystemIds),
+    resolveStructureNames(structureIds),
+    resolveAssetNames(cid, [...containerIds, ...shipItemIds])
+  ])
+
+  // A resolved container/ship name is shown as "In <name>"; a structure we can't
+  // access falls back to a generic label, then the view's "Location <id>".
+  function locationName(loc: { id: number; type: AssetRow['location_type'] }): string | undefined {
+    const n = nameOf(loc.id)
+    if (n) return loc.type === 'item' ? `In ${n}` : n
+    return loc.type === 'other' ? 'Player structure' : undefined
+  }
+
+  // Mineral price lookup for refinedValue (only the 9 tabled minerals).
+  const mineralPrices = new Map<number, number>()
+  for (const mineralTypeId of Object.values(MINERAL_TYPE_IDS)) {
+    mineralPrices.set(mineralTypeId, prices.get(mineralTypeId) ?? 0)
+  }
+
+  // Gear/materials aggregation excludes ship hulls themselves (they get their
+  // own Ships tab) and anything sitting inside any ship (fittings/cargo/drones
+  // belong to that ship, not to the flat Assets/Materials lists).
+  function isShipOrInShip(row: AssetRow): boolean {
+    return shipItemIds.has(row.item_id) || rowShip.has(row.item_id)
+  }
+  const gearRows = rows.filter((r) => !isShipOrInShip(r) && !isMaterialType(r.type_id))
+  const materialRows = rows.filter((r) => !isShipOrInShip(r) && isMaterialType(r.type_id))
+
+  const gearResult = aggregateHoldings(gearRows, roots, prices, mineralPrices, locationName)
+  const materialResult = aggregateHoldings(materialRows, roots, prices, mineralPrices, locationName)
+
+  // Ships: nest each ship's fittings/cargo/drones (aggregated by type + slot,
+  // since a ship can carry several of the same module across different slots).
+  function buildFittedItems(contentRows: AssetRow[]): FittedItem[] {
+    const map = new Map<string, FittedItem>()
+    for (const r of contentRows) {
+      const slot = slotOf(r.location_flag)
+      const key = `${r.type_id}:${slot}`
+      let f = map.get(key)
+      if (!f) {
+        f = { typeId: r.type_id, typeName: nameOf(r.type_id), quantity: 0, slot }
+        map.set(key, f)
+      }
+      f.quantity += r.quantity
+    }
+    return [...map.values()]
+  }
+
+  const ships: ShipInfo[] = shipEntries.map((entry) => {
+    const contentRows = rows.filter((r) => rowShip.get(r.item_id) === entry.itemId)
+    const fittings = buildFittedItems(contentRows)
+    const hullValue = prices.get(entry.typeId) ?? 0
+    const contentValue = contentRows.reduce((s, r) => s + (prices.get(r.type_id) ?? 0) * r.quantity, 0)
+
+    const loc = entry.isActive
+      ? (activeShipRoot ?? { id: 0, type: 'solar_system' as const })
+      : (roots.get(entry.itemId) ?? { id: 0, type: 'solar_system' as const })
+
+    return {
+      itemId: entry.itemId,
+      typeId: entry.typeId,
+      typeName: nameOf(entry.typeId),
+      name: nameOf(entry.itemId),
+      isActive: entry.isActive,
+      locationId: loc.id,
+      locationName: locationName(loc),
+      value: hullValue + contentValue,
+      fittings
+    }
+  })
+  ships.sort((a, b) => b.value - a.value)
+  const totalShipsValue = ships.reduce((s, sh) => s + sh.value, 0)
+
+  return {
+    ships,
+    gear: gearResult.holdings,
+    materials: materialResult.holdings,
+    totalGearValue: gearResult.totalValue,
+    totalMaterialValue: materialResult.totalValue,
+    totalShipsValue,
+    gearTypeCount: gearResult.itemTypeCount,
+    materialTypeCount: materialResult.itemTypeCount
+  }
+}
+
+/** Short-TTL cache around `buildInventory` — shared by Ships/Assets/Materials so
+ * hitting all three tabs in quick succession doesn't re-fetch and re-classify
+ * the whole asset list three times. */
+async function getInventory(cid: number): Promise<InventorySnapshot> {
+  if (inventoryCache && inventoryCache.cid === cid && Date.now() - inventoryCache.at < INVENTORY_TTL_MS) {
+    return inventoryCache.data
+  }
+  const data = await buildInventory(cid)
+  inventoryCache = { cid, at: Date.now(), data }
+  return data
+}
+
+/** Ships owned by the character, with their fittings/cargo/drones nested underneath. */
+export function fetchShips(characterId?: number): Promise<EsiResult<ShipsData>> {
+  return wrap(async () => {
+    const cid = characterId ?? getIdentity()?.characterId
+    if (!cid) throw new Error('Not logged in.')
+    const inv = await getInventory(cid)
+    return { ships: inv.ships, totalValue: inv.totalShipsValue }
+  })
+}
+
+/** Non-material gear: modules, ammo, and everything else not tabled as ore/mineral/ice — excludes ship hulls (see Ships) and anything fitted/stowed inside a ship. */
 export function fetchAssets(characterId?: number): Promise<EsiResult<AssetsData>> {
   return wrap(async () => {
     const cid = characterId ?? getIdentity()?.characterId
     if (!cid) throw new Error('Not logged in.')
-    return fetchAssetHoldings(cid, (typeId) => !isMaterialType(typeId))
+    const inv = await getInventory(cid)
+    return { holdings: inv.gear, totalValue: inv.totalGearValue, itemTypeCount: inv.gearTypeCount }
   })
 }
 
-/** Materials on hand: ore, minerals, and ice held across hangars/ships/containers. */
+/** Materials on hand: ore, minerals, and ice held across hangars/containers — excludes anything fitted/stowed inside a ship. */
 export function fetchMaterials(characterId?: number): Promise<EsiResult<AssetsData>> {
   return wrap(async () => {
     const cid = characterId ?? getIdentity()?.characterId
     if (!cid) throw new Error('Not logged in.')
-    return fetchAssetHoldings(cid, isMaterialType)
+    const inv = await getInventory(cid)
+    return {
+      holdings: inv.materials,
+      totalValue: inv.totalMaterialValue,
+      itemTypeCount: inv.materialTypeCount
+    }
   })
 }
 
