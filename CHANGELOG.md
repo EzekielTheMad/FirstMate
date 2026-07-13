@@ -3,6 +3,16 @@
 All notable changes to FirstMate are documented here. This file is the source
 of the release notes shown in the app's updater.
 
+## [0.1.11] - 2026-07-13
+
+### Fixed
+- **Critical:** in-app updates could *uninstall* the app (and remove its Start
+  Menu shortcut) instead of updating it. A custom installer step meant to clean
+  up an old install was silently running the app's own uninstaller during
+  updates. It's removed; updates now install cleanly over the previous version
+  and the shortcut is preserved. If your install went missing, download and run
+  the setup .exe from the release once — future updates will work normally.
+
 ## [0.1.10] - 2026-07-13
 
 ### Fixed
