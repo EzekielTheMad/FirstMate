@@ -4,7 +4,7 @@ import { useUpdates } from './lib/hooks'
 import { Dashboard } from './views/Dashboard'
 import { Exploration } from './views/Exploration'
 import { Economy } from './views/Economy'
-import { Materials } from './views/Materials'
+import { Assets } from './views/Assets'
 import { Mining } from './views/Mining'
 import { Industry } from './views/Industry'
 import { Combat } from './views/Combat'
@@ -19,7 +19,7 @@ type TabId =
   | 'dashboard'
   | 'exploration'
   | 'economy'
-  | 'materials'
+  | 'assets'
   | 'mining'
   | 'industry'
   | 'combat'
@@ -39,7 +39,7 @@ const TABS: Tab[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '🛰', needsAuth: true },
   { id: 'exploration', label: 'Explore', icon: '🌀' },
   { id: 'economy', label: 'Economy', icon: '💰', needsAuth: true },
-  { id: 'materials', label: 'Assets', icon: '📦', needsAuth: true },
+  { id: 'assets', label: 'Assets', icon: '📦', needsAuth: true },
   { id: 'mining', label: 'Mining', icon: '⛏', needsAuth: true },
   { id: 'industry', label: 'Industry', icon: '🏭', needsAuth: true },
   { id: 'combat', label: 'Combat', icon: '🎯' },
@@ -212,8 +212,8 @@ function TabContent({
       return <Exploration />
     case 'economy':
       return <Economy autoRefreshMs={autoRefreshMs} />
-    case 'materials':
-      return <Materials autoRefreshMs={autoRefreshMs} />
+    case 'assets':
+      return <Assets autoRefreshMs={autoRefreshMs} />
     case 'mining':
       return <Mining />
     case 'industry':
