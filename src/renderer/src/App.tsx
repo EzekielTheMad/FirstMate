@@ -6,6 +6,7 @@ import { Exploration } from './views/Exploration'
 import { Economy } from './views/Economy'
 import { Assets } from './views/Assets'
 import { Materials } from './views/Materials'
+import { Ships } from './views/Ships'
 import { Industry } from './views/Industry'
 import { Combat } from './views/Combat'
 import { Clones } from './views/Clones'
@@ -21,6 +22,7 @@ type TabId =
   | 'economy'
   | 'assets'
   | 'materials'
+  | 'ships'
   | 'industry'
   | 'combat'
   | 'clones'
@@ -41,6 +43,7 @@ const TABS: Tab[] = [
   { id: 'economy', label: 'Economy', icon: '💰', needsAuth: true },
   { id: 'assets', label: 'Assets', icon: '📦', needsAuth: true },
   { id: 'materials', label: 'Materials', icon: '⛏', needsAuth: true },
+  { id: 'ships', label: 'Ships', icon: '🚀', needsAuth: true },
   { id: 'industry', label: 'Industry', icon: '🏭', needsAuth: true },
   { id: 'combat', label: 'Combat', icon: '🎯' },
   { id: 'clones', label: 'Clones', icon: '🧬', needsAuth: true },
@@ -216,6 +219,8 @@ function TabContent({
       return <Assets autoRefreshMs={autoRefreshMs} />
     case 'materials':
       return <Materials autoRefreshMs={autoRefreshMs} />
+    case 'ships':
+      return <Ships autoRefreshMs={autoRefreshMs} />
     case 'industry':
       return <Industry autoRefreshMs={autoRefreshMs} />
     case 'combat':
