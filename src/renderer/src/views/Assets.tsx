@@ -18,11 +18,12 @@ export function Assets({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.Eleme
   }
 
   const a = data.data
+  const nw = a.netWorth
 
   return (
     <>
       <Panel
-        title="Assets"
+        title="Net Worth"
         actions={
           <>
             <UpdatedAgo at={lastUpdatedAt} />
@@ -32,10 +33,22 @@ export function Assets({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.Eleme
           </>
         }
       >
-        <div className="grid-2">
-          <Stat label="Total Value" value={isk(a.totalValue, true)} sub="current market price" tone="amber" />
-          <Stat label="Item Types" value={num(a.itemTypeCount)} sub="distinct types held" />
-        </div>
+        {nw ? (
+          <>
+            <Stat label="Total" value={isk(nw.total, true)} sub="gear + materials + ships" tone="amber" />
+            <div className="grid-2" style={{ marginTop: 10 }}>
+              <Stat label="Gear" value={isk(nw.gear, true)} />
+              <Stat label="Materials" value={isk(nw.materials, true)} />
+              <Stat label="Ships" value={isk(nw.ships, true)} />
+              <Stat label="Item Types" value={num(a.itemTypeCount)} sub="distinct gear types held" />
+            </div>
+          </>
+        ) : (
+          <div className="grid-2">
+            <Stat label="Total Value" value={isk(a.totalValue, true)} sub="current market price" tone="amber" />
+            <Stat label="Item Types" value={num(a.itemTypeCount)} sub="distinct types held" />
+          </div>
+        )}
       </Panel>
 
       <Panel title="Holdings">
