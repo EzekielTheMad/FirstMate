@@ -3,6 +3,16 @@
 All notable changes to FirstMate are documented here. This file is the source
 of the release notes shown in the app's updater.
 
+## [0.1.12] - 2026-07-14
+
+### Added
+- **Assets & Materials** now have a **By Type / By Location** toggle. "By
+  Location" groups everything under the station or structure it's sitting in, so
+  you can see where your stuff is scattered at a glance.
+- A **Net Worth** breakdown on the Assets page: your total value split across
+  **Gear**, **Materials**, and **Ships** — so you can see how much is tied up in
+  each without mixing ships into the item list.
+
 ## [0.1.11] - 2026-07-13
 
 ### Fixed
