@@ -888,7 +888,17 @@ export function fetchAssets(characterId?: number): Promise<EsiResult<AssetsData>
     const cid = characterId ?? getIdentity()?.characterId
     if (!cid) throw new Error('Not logged in.')
     const inv = await getInventory(cid)
-    return { holdings: inv.gear, totalValue: inv.totalGearValue, itemTypeCount: inv.gearTypeCount }
+    return {
+      holdings: inv.gear,
+      totalValue: inv.totalGearValue,
+      itemTypeCount: inv.gearTypeCount,
+      netWorth: {
+        gear: inv.totalGearValue,
+        materials: inv.totalMaterialValue,
+        ships: inv.totalShipsValue,
+        total: inv.totalGearValue + inv.totalMaterialValue + inv.totalShipsValue
+      }
+    }
   })
 }
 

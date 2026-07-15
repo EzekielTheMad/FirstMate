@@ -169,6 +169,8 @@ export interface AssetsData {
   holdings: AssetHolding[]
   totalValue: number
   itemTypeCount: number
+  /** Gear + Materials + Ships breakdown (Assets view only; omitted for Materials). */
+  netWorth?: { gear: number; materials: number; ships: number; total: number }
 }
 
 export type ShipSlot =
