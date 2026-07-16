@@ -3,6 +3,21 @@
 All notable changes to FirstMate are documented here. This file is the source
 of the release notes shown in the app's updater.
 
+## [0.1.13] - 2026-07-16
+
+### Added
+- The AI Advisor is now optional and provider-neutral, with support for a local
+  or remote **Hermes Agent**, Anthropic, OpenAI, and custom OpenAI-compatible
+  endpoints.
+- AI settings now include encrypted per-provider credentials, custom server
+  URLs, Hermes session scoping, and a connection test.
+
+### Changed
+- New installations start with AI disabled. Existing installations with an
+  Anthropic key automatically keep Anthropic selected.
+- Advisor character context is built once through a provider-independent data
+  service, so every provider uses the same ESI data pipeline.
+
 ## [0.1.12] - 2026-07-14
 
 ### Added

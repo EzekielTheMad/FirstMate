@@ -2,13 +2,35 @@ import { useEffect, useState } from 'react'
 import { Panel } from '../components/ui'
 import { renderMarkdown } from '../lib/format'
 import { useUpdates } from '../lib/hooks'
-import type { PublicSettings } from '@shared/types'
+import type {
+  AdvisorConnectionResult,
+  AdvisorProvider,
+  PublicSettings
+} from '@shared/types'
 
-const MODELS = [
-  { id: 'claude-opus-4-8', label: 'Claude Opus 4.8 (most capable)' },
-  { id: 'claude-sonnet-5', label: 'Claude Sonnet 5 (balanced)' },
-  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 (fastest)' }
+const PROVIDERS: Array<{ id: AdvisorProvider; label: string }> = [
+  { id: 'disabled', label: 'Disabled (default)' },
+  { id: 'hermes', label: 'Hermes Agent' },
+  { id: 'anthropic', label: 'Anthropic API' },
+  { id: 'openai', label: 'OpenAI API' },
+  { id: 'compatible', label: 'Custom / OpenAI-compatible' }
 ]
+
+const PROVIDER_DEFAULTS: Record<AdvisorProvider, { model: string; baseUrl: string }> = {
+  disabled: { model: '', baseUrl: '' },
+  anthropic: { model: 'claude-opus-4-8', baseUrl: '' },
+  openai: { model: 'gpt-5.4', baseUrl: '' },
+  hermes: { model: 'hermes-agent', baseUrl: 'http://127.0.0.1:8642/v1' },
+  compatible: { model: 'local-model', baseUrl: 'http://127.0.0.1:1234/v1' }
+}
+
+const MODEL_PRESETS: Record<AdvisorProvider, string[]> = {
+  disabled: [],
+  anthropic: ['claude-opus-4-8', 'claude-sonnet-5', 'claude-haiku-4-5'],
+  openai: ['gpt-5.6', 'gpt-5.4', 'gpt-5.4-mini'],
+  hermes: ['hermes-agent'],
+  compatible: []
+}
 
 const ZOOM_STEPS = [0.8, 0.9, 1.0, 1.1, 1.25, 1.5]
 
@@ -28,14 +50,22 @@ export function Settings({
 }): JSX.Element {
   const [clientId, setClientId] = useState(settings.ssoClientId)
   const [scheme, setScheme] = useState(settings.callbackScheme)
+  const [provider, setProvider] = useState<AdvisorProvider>(settings.advisorProvider)
   const [apiKey, setApiKey] = useState('')
   const [model, setModel] = useState(settings.advisorModel)
+  const [baseUrl, setBaseUrl] = useState(settings.advisorBaseUrl)
+  const [sessionKey, setSessionKey] = useState(settings.advisorSessionKey)
   const [saved, setSaved] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [connection, setConnection] = useState<AdvisorConnectionResult | null>(null)
 
   useEffect(() => {
     setClientId(settings.ssoClientId)
     setScheme(settings.callbackScheme)
+    setProvider(settings.advisorProvider)
     setModel(settings.advisorModel)
+    setBaseUrl(settings.advisorBaseUrl)
+    setSessionKey(settings.advisorSessionKey)
   }, [settings])
 
   // Enforce EVE's scheme rules: start with "eveauth", then lower-case letters,
@@ -46,21 +76,71 @@ export function Settings({
     return s.replace(/[.+-]+$/, '')
   }
 
-  async function save(): Promise<void> {
+  async function persist(showSaved = true): Promise<PublicSettings> {
     const cleanScheme = sanitizeScheme(scheme) || 'eveauth-firstmate'
     const patch: Record<string, unknown> = {
       ssoClientId: clientId.trim(),
       callbackScheme: cleanScheme,
-      advisorModel: model
+      advisorProvider: provider,
+      advisorModel: model.trim(),
+      advisorBaseUrl: baseUrl.trim(),
+      advisorSessionKey: sessionKey.trim() || 'firstmate'
     }
-    if (apiKey.trim()) patch.anthropicApiKey = apiKey.trim()
+    if (apiKey.trim()) {
+      if (provider === 'anthropic') patch.anthropicApiKey = apiKey.trim()
+      if (provider === 'openai') patch.openaiApiKey = apiKey.trim()
+      if (provider === 'hermes') patch.hermesApiKey = apiKey.trim()
+      if (provider === 'compatible') patch.compatibleApiKey = apiKey.trim()
+    }
     const next = await window.firstmate.settings.update(patch)
     onSaved(next)
     setScheme(next.callbackScheme)
     setApiKey('')
-    setSaved(true)
-    setTimeout(() => setSaved(false), 1800)
+    if (showSaved) {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 1800)
+    }
+    return next
   }
+
+  async function save(): Promise<void> {
+    await persist()
+  }
+
+  function changeProvider(next: AdvisorProvider): void {
+    setProvider(next)
+    setModel(PROVIDER_DEFAULTS[next].model)
+    setBaseUrl(PROVIDER_DEFAULTS[next].baseUrl)
+    setApiKey('')
+    setConnection(null)
+  }
+
+  async function testConnection(): Promise<void> {
+    if (testing || provider === 'disabled') return
+    setTesting(true)
+    setConnection(null)
+    try {
+      await persist(false)
+      setConnection(await window.firstmate.advisor.testConnection())
+    } catch (error) {
+      setConnection({ ok: false, message: (error as Error).message || String(error) })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const hasStoredKey =
+    (provider === 'anthropic' && settings.hasAnthropicKey) ||
+    (provider === 'openai' && settings.hasOpenAIKey) ||
+    (provider === 'hermes' && settings.hasHermesKey) ||
+    (provider === 'compatible' && settings.hasCompatibleKey)
+
+  const keyLabel =
+    provider === 'hermes'
+      ? 'Hermes bearer key'
+      : provider === 'compatible'
+        ? 'Endpoint API key (optional)'
+        : `${provider === 'openai' ? 'OpenAI' : 'Anthropic'} API key`
 
   const redirectUri = `${sanitizeScheme(scheme) || 'eveauth-firstmate'}://callback`
 
@@ -149,34 +229,94 @@ export function Settings({
 
       <Panel title="AI Advisor">
         <div className="field-group">
-          <label className="field-label">
-            Anthropic API key {settings.hasAnthropicKey && <span className="chip green">stored</span>}
-          </label>
-          <input
+          <label className="field-label">Provider</label>
+          <select
             className="field"
-            type="password"
-            placeholder={settings.hasAnthropicKey ? '•••••••• (leave blank to keep)' : 'sk-ant-…'}
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-          />
-        </div>
-        <div className="field-group">
-          <label className="field-label">Advisor model</label>
-          <select className="field" value={model} onChange={(e) => setModel(e.target.value)}>
-            {MODELS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
+            value={provider}
+            onChange={(e) => changeProvider(e.target.value as AdvisorProvider)}
+          >
+            {PROVIDERS.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
               </option>
             ))}
           </select>
         </div>
-        <div className="hint">
-          Your key is stored locally and encrypted at rest with the OS keystore when available. Get
-          one at{' '}
-          <a href="https://console.anthropic.com" target="_blank" rel="noreferrer">
-            console.anthropic.com
-          </a>
-          .
+
+        {provider !== 'disabled' && (
+          <>
+            {(provider === 'hermes' || provider === 'compatible') && (
+              <div className="field-group">
+                <label className="field-label">Server URL</label>
+                <input
+                  className="field"
+                  placeholder={PROVIDER_DEFAULTS[provider].baseUrl}
+                  value={baseUrl}
+                  onChange={(e) => setBaseUrl(e.target.value)}
+                />
+                <div className="hint">
+                  Include the API prefix, usually <code>/v1</code>. Use HTTPS for remote servers.
+                </div>
+              </div>
+            )}
+
+            <div className="field-group">
+              <label className="field-label">
+                {keyLabel} {hasStoredKey && <span className="chip green">stored</span>}
+              </label>
+              <input
+                className="field"
+                type="password"
+                placeholder={hasStoredKey ? '•••••••• (leave blank to keep)' : 'Enter access key'}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+              />
+            </div>
+
+            <div className="field-group">
+              <label className="field-label">Advisor model</label>
+              <input
+                className="field"
+                list="advisor-model-presets"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+              />
+              <datalist id="advisor-model-presets">
+                {MODEL_PRESETS[provider].map((item) => (
+                  <option key={item} value={item} />
+                ))}
+              </datalist>
+            </div>
+
+            {provider === 'hermes' && (
+              <div className="field-group">
+                <label className="field-label">Hermes session scope</label>
+                <input
+                  className="field"
+                  placeholder="firstmate"
+                  value={sessionKey}
+                  onChange={(e) => setSessionKey(e.target.value)}
+                />
+                <div className="hint">
+                  Keeps FirstMate memory separate from unrelated Hermes conversations.
+                </div>
+              </div>
+            )}
+
+            <div className="actions">
+              <button className="btn sm" onClick={testConnection} disabled={testing}>
+                {testing ? 'Testing…' : 'Test connection'}
+              </button>
+              {connection && (
+                <span className={`chip ${connection.ok ? 'green' : ''}`}>{connection.message}</span>
+              )}
+            </div>
+          </>
+        )}
+
+        <div className="hint" style={{ marginTop: 10 }}>
+          AI is optional. FirstMate never switches providers or falls back to a paid API unless you
+          configure it. Access keys are encrypted with the OS keystore when available.
         </div>
       </Panel>
 

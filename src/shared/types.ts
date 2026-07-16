@@ -2,6 +2,8 @@
  * Shared types used across the main process, preload bridge, and renderer.
  */
 
+export type AdvisorProvider = 'disabled' | 'anthropic' | 'openai' | 'hermes' | 'compatible'
+
 export interface AppSettings {
   /** EVE developer application Client ID (register at developers.eveonline.com). */
   ssoClientId: string
@@ -11,10 +13,22 @@ export interface AppSettings {
    * letters, digits, +, ., or -). The redirect URI is `${scheme}://callback`.
    */
   callbackScheme: string
+  /** Selected AI Advisor backend. AI is optional and disabled by default. */
+  advisorProvider: AdvisorProvider
   /** Anthropic API key for the AI Advisor (kept encrypted at rest). */
   anthropicApiKey: string
-  /** Anthropic model id for the AI Advisor. */
+  /** OpenAI API key for the AI Advisor (kept encrypted at rest). */
+  openaiApiKey: string
+  /** Hermes API bearer key (kept encrypted at rest). */
+  hermesApiKey: string
+  /** API key for a custom OpenAI-compatible endpoint (kept encrypted at rest). */
+  compatibleApiKey: string
+  /** Model id used by the selected AI Advisor provider. */
   advisorModel: string
+  /** Base URL for Hermes or a custom OpenAI-compatible endpoint. */
+  advisorBaseUrl: string
+  /** Stable Hermes memory/session scope for FirstMate requests. */
+  advisorSessionKey: string
   /** Renderer zoom factor (1.0 = 100%). */
   zoomFactor: number
   /** Auto-refresh interval in seconds for data views. 0 = off. */
@@ -27,8 +41,14 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // not a secret. Override it in Settings to use your own EVE application.
   ssoClientId: 'b830c7783f08444d9b12465296aa219d',
   callbackScheme: 'eveauth-firstmate',
+  advisorProvider: 'disabled',
   anthropicApiKey: '',
+  openaiApiKey: '',
+  hermesApiKey: '',
+  compatibleApiKey: '',
   advisorModel: 'claude-opus-4-8',
+  advisorBaseUrl: '',
+  advisorSessionKey: 'firstmate',
   zoomFactor: 1,
   autoRefreshSeconds: 0
 }
@@ -37,11 +57,22 @@ export const DEFAULT_SETTINGS: AppSettings = {
 export interface PublicSettings {
   ssoClientId: string
   callbackScheme: string
+  advisorProvider: AdvisorProvider
   advisorModel: string
+  advisorBaseUrl: string
+  advisorSessionKey: string
   zoomFactor: number
   autoRefreshSeconds: number
   /** True if an Anthropic key is stored, without revealing it. */
   hasAnthropicKey: boolean
+  /** True if an OpenAI key is stored, without revealing it. */
+  hasOpenAIKey: boolean
+  /** True if a Hermes bearer key is stored, without revealing it. */
+  hasHermesKey: boolean
+  /** True if a custom endpoint key is stored, without revealing it. */
+  hasCompatibleKey: boolean
+  /** True when the selected provider has enough configuration to be used. */
+  advisorReady: boolean
 }
 
 export interface CharacterIdentity {
@@ -306,6 +337,11 @@ export interface AdvisorResponse {
   error?: string
 }
 
+export interface AdvisorConnectionResult {
+  ok: boolean
+  message: string
+}
+
 export interface AdvisorHistoryEntry {
   id: string
   goal: string
@@ -378,6 +414,7 @@ export interface FirstMateApi {
   }
   advisor: {
     ask: (goal: AdvisorGoal) => Promise<AdvisorResponse>
+    testConnection: () => Promise<AdvisorConnectionResult>
     getHistory: () => Promise<AdvisorHistoryEntry[]>
     deleteHistory: (id: string) => Promise<AdvisorHistoryEntry[]>
     clearHistory: () => Promise<AdvisorHistoryEntry[]>

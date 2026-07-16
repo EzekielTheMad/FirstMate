@@ -228,7 +228,12 @@ function TabContent({
     case 'clones':
       return <Clones />
     case 'advisor':
-      return <Advisor hasKey={settings?.hasAnthropicKey ?? false} />
+      return (
+        <Advisor
+          ready={settings?.advisorReady ?? false}
+          provider={settings?.advisorProvider ?? 'disabled'}
+        />
+      )
     case 'settings':
       return settings ? (
         <Settings settings={settings} onSaved={onSettingsSaved} />

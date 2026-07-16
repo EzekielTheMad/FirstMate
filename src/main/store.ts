@@ -5,10 +5,12 @@ import {
   AppSettings,
   DEFAULT_SETTINGS,
   PublicSettings,
+  AdvisorProvider,
   ExplorationState,
   CombatSnapshot,
   AdvisorHistoryEntry
 } from '@shared/types'
+import { isAdvisorReady, resolveAdvisorProvider } from '@shared/advisor-settings'
 
 /**
  * Small JSON-file persistence layer living in the Electron userData dir.
@@ -73,22 +75,53 @@ export function decryptSecret(stored: string): string {
 
 // ---- Settings --------------------------------------------------------------
 
-interface StoredSettings extends Omit<AppSettings, 'anthropicApiKey'> {
+interface StoredSettings
+  extends Omit<
+    AppSettings,
+    | 'advisorProvider'
+    | 'anthropicApiKey'
+    | 'openaiApiKey'
+    | 'hermesApiKey'
+    | 'compatibleApiKey'
+  > {
+  /** Optional so settings written before provider selection existed can be migrated. */
+  advisorProvider?: AdvisorProvider
   anthropicApiKeyEnc: string
+  openaiApiKeyEnc: string
+  hermesApiKeyEnc: string
+  compatibleApiKeyEnc: string
 }
 
 const SETTINGS_FILE = 'settings.json'
 
 export function getSettings(): AppSettings {
   const raw = readJson<StoredSettings>(SETTINGS_FILE, {
-    ...DEFAULT_SETTINGS,
-    anthropicApiKeyEnc: ''
+    ssoClientId: DEFAULT_SETTINGS.ssoClientId,
+    callbackScheme: DEFAULT_SETTINGS.callbackScheme,
+    advisorModel: DEFAULT_SETTINGS.advisorModel,
+    advisorBaseUrl: DEFAULT_SETTINGS.advisorBaseUrl,
+    advisorSessionKey: DEFAULT_SETTINGS.advisorSessionKey,
+    zoomFactor: DEFAULT_SETTINGS.zoomFactor,
+    autoRefreshSeconds: DEFAULT_SETTINGS.autoRefreshSeconds,
+    anthropicApiKeyEnc: '',
+    openaiApiKeyEnc: '',
+    hermesApiKeyEnc: '',
+    compatibleApiKeyEnc: ''
   })
+  const anthropicApiKey = decryptSecret(raw.anthropicApiKeyEnc)
   return {
     ssoClientId: raw.ssoClientId,
     callbackScheme: raw.callbackScheme || DEFAULT_SETTINGS.callbackScheme,
-    anthropicApiKey: decryptSecret(raw.anthropicApiKeyEnc),
-    advisorModel: raw.advisorModel,
+    // Old releases only stored an Anthropic key/model. Keep those users enabled
+    // while leaving genuinely new installations disabled by default.
+    advisorProvider: resolveAdvisorProvider(raw.advisorProvider, Boolean(anthropicApiKey)),
+    anthropicApiKey,
+    openaiApiKey: decryptSecret(raw.openaiApiKeyEnc),
+    hermesApiKey: decryptSecret(raw.hermesApiKeyEnc),
+    compatibleApiKey: decryptSecret(raw.compatibleApiKeyEnc),
+    advisorModel: raw.advisorModel || DEFAULT_SETTINGS.advisorModel,
+    advisorBaseUrl: raw.advisorBaseUrl || '',
+    advisorSessionKey: raw.advisorSessionKey || DEFAULT_SETTINGS.advisorSessionKey,
     zoomFactor: raw.zoomFactor ?? DEFAULT_SETTINGS.zoomFactor,
     autoRefreshSeconds: raw.autoRefreshSeconds ?? DEFAULT_SETTINGS.autoRefreshSeconds
   }
@@ -100,10 +133,16 @@ export function saveSettings(patch: Partial<AppSettings>): AppSettings {
   const stored: StoredSettings = {
     ssoClientId: merged.ssoClientId,
     callbackScheme: merged.callbackScheme,
+    advisorProvider: merged.advisorProvider,
     advisorModel: merged.advisorModel,
+    advisorBaseUrl: merged.advisorBaseUrl,
+    advisorSessionKey: merged.advisorSessionKey,
     zoomFactor: merged.zoomFactor,
     autoRefreshSeconds: merged.autoRefreshSeconds,
-    anthropicApiKeyEnc: encryptSecret(merged.anthropicApiKey)
+    anthropicApiKeyEnc: encryptSecret(merged.anthropicApiKey),
+    openaiApiKeyEnc: encryptSecret(merged.openaiApiKey),
+    hermesApiKeyEnc: encryptSecret(merged.hermesApiKey),
+    compatibleApiKeyEnc: encryptSecret(merged.compatibleApiKey)
   }
   writeJson(SETTINGS_FILE, stored)
   return merged
@@ -113,10 +152,17 @@ export function toPublicSettings(s: AppSettings): PublicSettings {
   return {
     ssoClientId: s.ssoClientId,
     callbackScheme: s.callbackScheme,
+    advisorProvider: s.advisorProvider,
     advisorModel: s.advisorModel,
+    advisorBaseUrl: s.advisorBaseUrl,
+    advisorSessionKey: s.advisorSessionKey,
     zoomFactor: s.zoomFactor,
     autoRefreshSeconds: s.autoRefreshSeconds,
-    hasAnthropicKey: Boolean(s.anthropicApiKey)
+    hasAnthropicKey: Boolean(s.anthropicApiKey),
+    hasOpenAIKey: Boolean(s.openaiApiKey),
+    hasHermesKey: Boolean(s.hermesApiKey),
+    hasCompatibleKey: Boolean(s.compatibleApiKey),
+    advisorReady: isAdvisorReady(s)
   }
 }
 

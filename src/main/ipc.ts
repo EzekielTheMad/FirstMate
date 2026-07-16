@@ -31,6 +31,7 @@ import {
   fetchClones
 } from './esi/client'
 import { askAdvisor } from './ai/advisor'
+import { testAdvisorConnection } from './ai/providers'
 import { registerProtocol } from './protocol'
 import {
   getUpdateState,
@@ -80,6 +81,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   // Advisor
   ipcMain.handle('advisor:ask', (_e, goal: AdvisorGoal) => askAdvisor(goal))
+  ipcMain.handle('advisor:testConnection', () => testAdvisorConnection(getSettings()))
   ipcMain.handle('advisor:getHistory', () => getAdvisorHistory())
   ipcMain.handle('advisor:deleteHistory', (_e, id: string) => deleteAdvisorHistory(id))
   ipcMain.handle('advisor:clearHistory', () => clearAdvisorHistory())

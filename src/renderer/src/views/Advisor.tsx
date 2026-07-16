@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Panel, ErrorBox, EmptyState } from '../components/ui'
 import { renderMarkdown, isk, num, relativeTime } from '../lib/format'
-import type { AdvisorHistoryEntry, AdvisorResponse } from '@shared/types'
+import type { AdvisorHistoryEntry, AdvisorProvider, AdvisorResponse } from '@shared/types'
 
 const EXAMPLES = [
   'Become self-sufficient in a wormhole',
@@ -10,7 +10,13 @@ const EXAMPLES = [
   'Set up passive market trading income'
 ]
 
-export function Advisor({ hasKey }: { hasKey: boolean }): JSX.Element {
+export function Advisor({
+  ready,
+  provider
+}: {
+  ready: boolean
+  provider: AdvisorProvider
+}): JSX.Element {
   const [goal, setGoal] = useState('')
   const [focus, setFocus] = useState('')
   const [loading, setLoading] = useState(false)
@@ -50,11 +56,12 @@ export function Advisor({ hasKey }: { hasKey: boolean }): JSX.Element {
   return (
     <>
       <Panel title="AI Advisor">
-        {!hasKey && (
+        {!ready && (
           <div className="error-box">
-            Add an Anthropic API key in Settings to enable the advisor. It reads your live
-            character context (ISK, skills, location, market orders) and recommends what to focus
-            on to reach your goal.
+            {provider === 'disabled'
+              ? 'The AI Advisor is optional and currently disabled. Choose a provider in Settings to enable it.'
+              : 'Finish configuring the selected AI provider in Settings to enable the advisor.'}{' '}
+            It uses your live character context to recommend what to focus on next.
           </div>
         )}
         <div className="field-group">
@@ -76,7 +83,7 @@ export function Advisor({ hasKey }: { hasKey: boolean }): JSX.Element {
           />
         </div>
         <div className="actions">
-          <button className="btn primary" onClick={ask} disabled={loading || !goal.trim() || !hasKey}>
+          <button className="btn primary" onClick={ask} disabled={loading || !goal.trim() || !ready}>
             {loading ? 'Consulting…' : 'Get advice'}
           </button>
           {EXAMPLES.map((ex) => (

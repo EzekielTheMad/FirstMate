@@ -22,13 +22,13 @@ secondary monitor.
 | **Economy** | Wallet balance, buy/sell escrow, open market orders, wallet journal | Live ESI |
 | **Mining** | Mining ledger grouped by ore/type with average-market-price value estimates | Live ESI |
 | **Combat** | Local fittings library (EFT/pyfa paste) and tactical notes | Local |
-| **Advisor** | Enter a goal → prioritized recommendations from Claude, using your live ISK/skills/location/orders as context | Anthropic API |
-| **Settings** | EVE SSO Client ID, callback port, Anthropic key & model | — |
+| **Advisor** | Enter a goal → prioritized AI recommendations using your live ISK/skills/location/orders as context | Optional: Hermes, Anthropic, OpenAI, or compatible endpoint |
+| **Settings** | EVE SSO, display, updates, and optional AI provider configuration | — |
 
 Authentication uses the **OAuth 2.0 PKCE** flow — no client secret required. The SSO redirect
 comes back through a **custom URL scheme** (`eveauth-firstmate://callback`) that the app registers
 as an OS protocol handler, so no local web server or open port is needed. Your refresh token and
-Anthropic API key are stored locally and encrypted at rest with the OS keystore (Electron
+AI provider keys are stored locally and encrypted at rest with the OS keystore (Electron
 `safeStorage`) when available.
 
 > **Custom-scheme handlers work best from a packaged/installed build.** In `npm run dev` on
@@ -52,15 +52,29 @@ installer (it adds Start-menu and desktop shortcuts). Then launch FirstMate and 
 ## Prerequisites (running from source)
 
 - **Node.js 20+**
-- (Optional) an **Anthropic API key** for the AI Advisor
+- (Optional) a **Hermes Agent**, provider API key, or OpenAI-compatible model endpoint for the AI Advisor
 - The app ships with a built-in EVE Client ID, so no EVE developer account is required
 
 ## Setup
 
 FirstMate ships with a built-in EVE application Client ID, so **most people just install and log
 in** — no EVE developer account needed. Click **Log in with EVE**, approve the consent page in
-your browser, and your character connects. (For the AI Advisor, add your own Anthropic API key in
-Settings — see below.)
+your browser, and your character connects. AI is disabled by default and can be configured in
+Settings without affecting any other FirstMate feature.
+
+### (Optional) Configure the AI Advisor
+
+Choose one provider in **Settings → AI Advisor**:
+
+- **Hermes Agent** — point FirstMate at an authenticated Hermes API server, normally
+  `http://127.0.0.1:8642/v1` when it runs on the same computer. Hermes exposes an
+  OpenAI-compatible API; FirstMate uses a stable session scope to keep its context separate.
+- **Anthropic API** or **OpenAI API** — store the corresponding provider key locally.
+- **Custom / OpenAI-compatible** — use LM Studio, another local server, or a compatible hosted
+  endpoint by supplying its `/v1` base URL and optional key.
+
+Use **Test connection** before opening the Advisor. FirstMate never silently switches providers or
+falls back to a paid API. Character context is sent only to the provider URL you select.
 
 ### Run from source
 
@@ -112,7 +126,9 @@ src/
     store.ts           Encrypted settings + local data persistence
     auth/sso.ts        EVE SSO PKCE flow (loopback server, token refresh)
     esi/client.ts      ESI API client (dashboard, economy, mining)
-    ai/advisor.ts      Anthropic advisor (gathers context, calls Claude)
+    ai/context.ts      Provider-independent Advisor character context
+    ai/providers.ts    Anthropic, OpenAI, Hermes, and compatible adapters
+    ai/advisor.ts      Advisor orchestration and history
   preload/index.ts     contextBridge — exposes a typed window.firstmate API
   renderer/            React + TypeScript UI (Vite)
     src/App.tsx        Tabbed shell + auth guard
@@ -163,11 +179,11 @@ Building locally on Windows instead: `npm run package` → `dist/`.
 - **Wormhole connections are not in ESI**, so the Explore tab is a manual local tracker — paste
   signatures from the in-game scanner and classify them.
 - Mining value estimates use ESI **average market prices**; real refined/sell value will differ.
-- The AI Advisor requires an Anthropic API key and network access; it sends a summary of your
-  character context (ISK, skills, location, market orders) to Claude to generate advice.
+- The AI Advisor is optional. When enabled, it sends a summary of your character context (ISK,
+  skills, location, market orders) only to the Hermes or model-provider endpoint you configure.
 - ESI mining ledger and some endpoints update on a delay (roughly daily) — the app reflects
   whatever ESI currently returns.
 
 ## Tech
 
-Electron · React · TypeScript · Vite (via electron-vite) · Anthropic SDK · EVE ESI.
+Electron · React · TypeScript · Vite (via electron-vite) · Anthropic SDK · OpenAI-compatible APIs · EVE ESI.

@@ -44,6 +44,7 @@ const api: FirstMateApi = {
   },
   advisor: {
     ask: (goal: AdvisorGoal) => ipcRenderer.invoke('advisor:ask', goal),
+    testConnection: () => ipcRenderer.invoke('advisor:testConnection'),
     getHistory: () => ipcRenderer.invoke('advisor:getHistory'),
     deleteHistory: (id: string) => ipcRenderer.invoke('advisor:deleteHistory', id),
     clearHistory: () => ipcRenderer.invoke('advisor:clearHistory')
