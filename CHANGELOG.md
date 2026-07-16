@@ -3,6 +3,30 @@
 All notable changes to FirstMate are documented here. This file is the source
 of the release notes shown in the app's updater.
 
+## [0.1.16] - 2026-07-16
+
+### Added
+- An optional authenticated, read-only **FirstMate MCP server** lets Hermes
+  agents query live ESI and local FirstMate data from Discord, CLI, or other
+  Hermes conversations without creating a second data pipeline.
+- Added 21 bounded tools for status, character overview, location, ship, skill
+  queue, wallet, orders, asset locations/search, home-base cleanup evidence,
+  ore reprocessing comparisons, ships/fittings/cargo, mining, industry, clones,
+  wormhole chains/alerts, combat fits, and Advisor history.
+- Settings now include local-only or explicit LAN/Docker access, port, a
+  separately encrypted FirstMate MCP key, server status, copyable Hermes
+  configuration, and an explicit home-base asset-location selector.
+- Added end-to-end MCP protocol and authorization tests using the official MCP
+  client, including rejection of missing keys and browser-origin requests.
+- Added a complete Hermes/Discord configuration and troubleshooting guide.
+
+### Security
+- The bridge is disabled by default, binds to `127.0.0.1` by default, requires
+  bearer authentication on every request, rejects browser origins, validates
+  loopback Host headers, limits request bodies, and exposes no mutating tools.
+- The FirstMate MCP key is separate from Hermes's own API server key and is
+  encrypted at rest with the existing OS-keystore-backed settings store.
+
 ## [0.1.15] - 2026-07-16
 
 ### Added

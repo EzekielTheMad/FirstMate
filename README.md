@@ -23,6 +23,7 @@ secondary monitor.
 | **Mining** | Mining ledger grouped by ore/type with average-market-price value estimates | Live ESI |
 | **Combat** | Local fittings library (EFT/pyfa paste) and tactical notes | Local |
 | **Advisor** | Enter a goal → prioritized AI recommendations using your live ISK/skills/location/orders as context | Optional: Hermes, Anthropic, OpenAI, or compatible endpoint |
+| **Hermes data bridge** | Optional authenticated, read-only MCP tools for character, assets, ships, economy, industry, exploration, and local libraries in Hermes/Discord | Live ESI + local FirstMate data |
 | **Settings** | EVE SSO, display, updates, and optional AI provider configuration | — |
 
 Authentication uses the **OAuth 2.0 PKCE** flow — no client secret required. The SSO redirect
@@ -95,10 +96,10 @@ security guidance, connection tests, data-sharing details, and troubleshooting, 
 See **[Explore and wormhole chain tracking](docs/exploration-chain.md)** for field meanings,
 scanner-paste examples, migration behavior, and recovery tips.
 
-> FirstMate currently saves successful answers as local history, but each **Get advice** request is
-> independent. The Hermes session scope isolates FirstMate-related Hermes memory; it does not make
-> the current Advisor UI multi-turn. A Discord Hermes agent also needs a future, separate read-only
-> FirstMate MCP connection before it can query live FirstMate data.
+> FirstMate's in-app Advisor requests are independent. For a persistent conversation, enable
+> **Settings → Hermes data access (MCP)** and connect that read-only tool server to Hermes. Discord
+> conversations can then query FirstMate through the normal Hermes tool pipeline while FirstMate
+> is running. See [Hermes/Discord data access](docs/hermes-firstmate-mcp.md).
 
 ### Run from source
 

@@ -5,6 +5,8 @@ import { useUpdates } from '../lib/hooks'
 import type {
   AdvisorConnectionResult,
   AdvisorProvider,
+  McpAssetLocation,
+  McpServerStatus,
   PublicSettings
 } from '@shared/types'
 
@@ -58,6 +60,14 @@ export function Settings({
   const [saved, setSaved] = useState(false)
   const [testing, setTesting] = useState(false)
   const [connection, setConnection] = useState<AdvisorConnectionResult | null>(null)
+  const [mcpEnabled, setMcpEnabled] = useState(settings.mcpEnabled)
+  const [mcpAllowLan, setMcpAllowLan] = useState(settings.mcpAllowLan)
+  const [mcpPort, setMcpPort] = useState(String(settings.mcpPort))
+  const [mcpKey, setMcpKey] = useState('')
+  const [mcpHomeLocationId, setMcpHomeLocationId] = useState(settings.mcpHomeLocationId)
+  const [mcpStatus, setMcpStatus] = useState<McpServerStatus | null>(null)
+  const [assetLocations, setAssetLocations] = useState<McpAssetLocation[]>([])
+  const [mcpCopied, setMcpCopied] = useState('')
 
   useEffect(() => {
     setClientId(settings.ssoClientId)
@@ -66,7 +76,15 @@ export function Settings({
     setModel(settings.advisorModel)
     setBaseUrl(settings.advisorBaseUrl)
     setSessionKey(settings.advisorSessionKey)
+    setMcpEnabled(settings.mcpEnabled)
+    setMcpAllowLan(settings.mcpAllowLan)
+    setMcpPort(String(settings.mcpPort))
+    setMcpHomeLocationId(settings.mcpHomeLocationId)
   }, [settings])
+
+  useEffect(() => {
+    void window.firstmate.mcp.getStatus().then(setMcpStatus)
+  }, [settings.mcpEnabled, settings.mcpAllowLan, settings.mcpPort, settings.hasMcpKey])
 
   // Enforce EVE's scheme rules: start with "eveauth", then lower-case letters,
   // digits, +, ., or - — ending with a letter or digit.
@@ -84,7 +102,11 @@ export function Settings({
       advisorProvider: provider,
       advisorModel: model.trim(),
       advisorBaseUrl: baseUrl.trim(),
-      advisorSessionKey: sessionKey.trim() || 'firstmate'
+      advisorSessionKey: sessionKey.trim() || 'firstmate',
+      mcpEnabled,
+      mcpAllowLan,
+      mcpPort: Math.min(65535, Math.max(1024, Number(mcpPort) || 8643)),
+      mcpHomeLocationId
     }
     if (apiKey.trim()) {
       if (provider === 'anthropic') patch.anthropicApiKey = apiKey.trim()
@@ -92,6 +114,7 @@ export function Settings({
       if (provider === 'hermes') patch.hermesApiKey = apiKey.trim()
       if (provider === 'compatible') patch.compatibleApiKey = apiKey.trim()
     }
+    if (mcpKey.trim()) patch.mcpApiKey = mcpKey.trim()
     const next = await window.firstmate.settings.update(patch)
     onSaved(next)
     setScheme(next.callbackScheme)
@@ -105,6 +128,7 @@ export function Settings({
 
   async function save(): Promise<void> {
     await persist()
+    setMcpStatus(await window.firstmate.mcp.getStatus())
   }
 
   function changeProvider(next: AdvisorProvider): void {
@@ -153,6 +177,42 @@ export function Settings({
   async function setAutoRefresh(seconds: number): Promise<void> {
     const next = await window.firstmate.settings.update({ autoRefreshSeconds: seconds })
     onSaved(next)
+  }
+
+  function generateMcpKey(): void {
+    const bytes = new Uint8Array(32)
+    window.crypto.getRandomValues(bytes)
+    const key = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    setMcpKey(key)
+    setMcpCopied('')
+  }
+
+  async function loadAssetLocations(): Promise<void> {
+    try {
+      setAssetLocations(await window.firstmate.mcp.listAssetLocations())
+    } catch {
+      setAssetLocations([])
+    }
+  }
+
+  const mcpClientHost = mcpAllowLan ? 'host.docker.internal' : '127.0.0.1'
+  const mcpEndpoint = `http://${mcpClientHost}:${Number(mcpPort) || 8643}/mcp`
+  const hermesMcpConfig = `mcp_servers:
+  firstmate:
+    url: "${mcpEndpoint}"
+    headers:
+      Authorization: "Bearer \${FIRSTMATE_MCP_KEY}"
+    timeout: 120
+    connect_timeout: 30
+    supports_parallel_tool_calls: false
+    tools:
+      resources: false
+      prompts: false`
+
+  async function copyMcp(value: string, label: string): Promise<void> {
+    await navigator.clipboard.writeText(value)
+    setMcpCopied(label)
+    window.setTimeout(() => setMcpCopied(''), 1800)
   }
 
   return (
@@ -318,6 +378,77 @@ export function Settings({
           AI is optional. FirstMate never switches providers or falls back to a paid API unless you
           configure it. Access keys are encrypted with the OS keystore when available.
         </div>
+      </Panel>
+
+      <Panel
+        title="Hermes data access (MCP)"
+        actions={
+          <span className={`chip ${mcpStatus?.running ? 'green' : mcpStatus?.error ? 'red' : ''}`}>
+            {mcpStatus?.running ? 'Running' : mcpStatus?.error ? 'Error' : 'Stopped'}
+          </span>
+        }
+      >
+        <div className="field-group">
+          <label className="field-label">Read-only data bridge</label>
+          <button className={`btn sm ${mcpEnabled ? 'primary' : ''}`} onClick={() => setMcpEnabled((enabled) => !enabled)}>
+            {mcpEnabled ? 'Enabled' : 'Disabled'}
+          </button>
+          <div className="hint">
+            Independent from the AI Advisor. This lets Hermes tools query FirstMate from CLI,
+            Discord, or another Hermes gateway while FirstMate is running.
+          </div>
+        </div>
+
+        <div className="field-group">
+          <label className="field-label">Access</label>
+          <select className="field" value={mcpAllowLan ? 'lan' : 'local'} onChange={(event) => setMcpAllowLan(event.target.value === 'lan')}>
+            <option value="local">This computer only</option>
+            <option value="lan">Local network / Docker</option>
+          </select>
+          {mcpAllowLan && <div className="warn-box" style={{ marginTop: 8 }}>LAN mode sends the bearer key over plain HTTP. Use only a trusted private network or Docker Desktop. Never forward this port from your router.</div>}
+        </div>
+
+        <div className="field-group">
+          <label className="field-label">Port</label>
+          <input className="field" inputMode="numeric" value={mcpPort} onChange={(event) => setMcpPort(event.target.value.replace(/\D/g, ''))} />
+        </div>
+
+        <div className="field-group">
+          <label className="field-label">
+            FirstMate MCP access key {settings.hasMcpKey && <span className="chip green">stored</span>}
+          </label>
+          <input className="field" type="password" placeholder={settings.hasMcpKey ? '•••••••• (leave blank to keep)' : 'Generate or enter a strong key'} value={mcpKey} onChange={(event) => setMcpKey(event.target.value)} />
+          <div className="actions" style={{ marginTop: 7 }}>
+            <button className="btn sm" onClick={generateMcpKey}>{settings.hasMcpKey ? 'Rotate key' : 'Generate key'}</button>
+            {mcpKey && <button className="btn sm" onClick={() => copyMcp(`FIRSTMATE_MCP_KEY=${mcpKey}`, 'key')}>{mcpCopied === 'key' ? 'Copied ✓' : 'Copy .env line'}</button>}
+          </div>
+          <div className="hint">This is separate from Hermes's API_SERVER_KEY. A rotated key disconnects existing clients after you save.</div>
+        </div>
+
+        <div className="field-group">
+          <label className="field-label">Home base asset location</label>
+          <div className="actions">
+            <select className="field" value={mcpHomeLocationId} onChange={(event) => setMcpHomeLocationId(event.target.value)}>
+              <option value="">Not configured — Hermes will ask</option>
+              {assetLocations.map((location) => <option key={location.locationId} value={String(location.locationId)}>{location.locationName ?? `Location ${location.locationId}`} · {Math.round(location.estimatedValue).toLocaleString()} ISK</option>)}
+              {mcpHomeLocationId && !assetLocations.some((location) => String(location.locationId) === mcpHomeLocationId) && <option value={mcpHomeLocationId}>Saved location {mcpHomeLocationId}</option>}
+            </select>
+            <button className="btn sm" onClick={loadAssetLocations}>Load locations</button>
+          </div>
+          <div className="hint">Your operating base is explicit; FirstMate will not assume your medical-clone station is home.</div>
+        </div>
+
+        <div className="field-group">
+          <label className="field-label">Hermes MCP configuration</label>
+          <textarea className="field" readOnly value={hermesMcpConfig} style={{ minHeight: 210, fontFamily: 'monospace', fontSize: 11 }} />
+          <div className="actions" style={{ marginTop: 7 }}>
+            <button className="btn sm" onClick={() => copyMcp(hermesMcpConfig, 'config')}>{mcpCopied === 'config' ? 'Copied ✓' : 'Copy config.yaml block'}</button>
+          </div>
+          <div className="hint">Native Hermes uses 127.0.0.1. Docker uses host.docker.internal and requires Local network / Docker access. After saving, add both snippets to Hermes and run <code>/reload-mcp</code> or restart the gateway.</div>
+        </div>
+
+        {mcpStatus?.error && <div className="error-box">{mcpStatus.error}</div>}
+        <div className="hint">Endpoint: <code>{mcpEndpoint}</code> · All exposed tools are read-only.</div>
       </Panel>
 
       <div className="actions">

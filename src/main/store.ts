@@ -84,6 +84,7 @@ interface StoredSettings
     | 'openaiApiKey'
     | 'hermesApiKey'
     | 'compatibleApiKey'
+    | 'mcpApiKey'
   > {
   /** Optional so settings written before provider selection existed can be migrated. */
   advisorProvider?: AdvisorProvider
@@ -91,6 +92,7 @@ interface StoredSettings
   openaiApiKeyEnc: string
   hermesApiKeyEnc: string
   compatibleApiKeyEnc: string
+  mcpApiKeyEnc: string
 }
 
 const SETTINGS_FILE = 'settings.json'
@@ -102,12 +104,17 @@ export function getSettings(): AppSettings {
     advisorModel: DEFAULT_SETTINGS.advisorModel,
     advisorBaseUrl: DEFAULT_SETTINGS.advisorBaseUrl,
     advisorSessionKey: DEFAULT_SETTINGS.advisorSessionKey,
+    mcpEnabled: DEFAULT_SETTINGS.mcpEnabled,
+    mcpAllowLan: DEFAULT_SETTINGS.mcpAllowLan,
+    mcpPort: DEFAULT_SETTINGS.mcpPort,
+    mcpHomeLocationId: DEFAULT_SETTINGS.mcpHomeLocationId,
     zoomFactor: DEFAULT_SETTINGS.zoomFactor,
     autoRefreshSeconds: DEFAULT_SETTINGS.autoRefreshSeconds,
     anthropicApiKeyEnc: '',
     openaiApiKeyEnc: '',
     hermesApiKeyEnc: '',
-    compatibleApiKeyEnc: ''
+    compatibleApiKeyEnc: '',
+    mcpApiKeyEnc: ''
   })
   const anthropicApiKey = decryptSecret(raw.anthropicApiKeyEnc)
   return {
@@ -123,6 +130,11 @@ export function getSettings(): AppSettings {
     advisorModel: raw.advisorModel || DEFAULT_SETTINGS.advisorModel,
     advisorBaseUrl: raw.advisorBaseUrl || '',
     advisorSessionKey: raw.advisorSessionKey || DEFAULT_SETTINGS.advisorSessionKey,
+    mcpEnabled: raw.mcpEnabled ?? DEFAULT_SETTINGS.mcpEnabled,
+    mcpAllowLan: raw.mcpAllowLan ?? DEFAULT_SETTINGS.mcpAllowLan,
+    mcpPort: raw.mcpPort ?? DEFAULT_SETTINGS.mcpPort,
+    mcpApiKey: decryptSecret(raw.mcpApiKeyEnc),
+    mcpHomeLocationId: raw.mcpHomeLocationId ?? DEFAULT_SETTINGS.mcpHomeLocationId,
     zoomFactor: raw.zoomFactor ?? DEFAULT_SETTINGS.zoomFactor,
     autoRefreshSeconds: raw.autoRefreshSeconds ?? DEFAULT_SETTINGS.autoRefreshSeconds
   }
@@ -138,12 +150,17 @@ export function saveSettings(patch: Partial<AppSettings>): AppSettings {
     advisorModel: merged.advisorModel,
     advisorBaseUrl: merged.advisorBaseUrl,
     advisorSessionKey: merged.advisorSessionKey,
+    mcpEnabled: merged.mcpEnabled,
+    mcpAllowLan: merged.mcpAllowLan,
+    mcpPort: merged.mcpPort,
+    mcpHomeLocationId: merged.mcpHomeLocationId,
     zoomFactor: merged.zoomFactor,
     autoRefreshSeconds: merged.autoRefreshSeconds,
     anthropicApiKeyEnc: encryptSecret(merged.anthropicApiKey),
     openaiApiKeyEnc: encryptSecret(merged.openaiApiKey),
     hermesApiKeyEnc: encryptSecret(merged.hermesApiKey),
-    compatibleApiKeyEnc: encryptSecret(merged.compatibleApiKey)
+    compatibleApiKeyEnc: encryptSecret(merged.compatibleApiKey),
+    mcpApiKeyEnc: encryptSecret(merged.mcpApiKey)
   }
   writeJson(SETTINGS_FILE, stored)
   return merged
@@ -157,12 +174,17 @@ export function toPublicSettings(s: AppSettings): PublicSettings {
     advisorModel: s.advisorModel,
     advisorBaseUrl: s.advisorBaseUrl,
     advisorSessionKey: s.advisorSessionKey,
+    mcpEnabled: s.mcpEnabled,
+    mcpAllowLan: s.mcpAllowLan,
+    mcpPort: s.mcpPort,
+    mcpHomeLocationId: s.mcpHomeLocationId,
     zoomFactor: s.zoomFactor,
     autoRefreshSeconds: s.autoRefreshSeconds,
     hasAnthropicKey: Boolean(s.anthropicApiKey),
     hasOpenAIKey: Boolean(s.openaiApiKey),
     hasHermesKey: Boolean(s.hermesApiKey),
     hasCompatibleKey: Boolean(s.compatibleApiKey),
+    hasMcpKey: Boolean(s.mcpApiKey),
     advisorReady: isAdvisorReady(s)
   }
 }

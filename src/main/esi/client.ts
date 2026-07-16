@@ -48,6 +48,7 @@ const groupCategory = new Map<number, number>()
 
 /** Single-entry (per logged-in character) cache of the combined ships/assets pass. */
 let inventoryCache: { cid: number; at: number; data: InventorySnapshot } | null = null
+let inventoryInFlight: { cid: number; promise: Promise<InventorySnapshot> } | null = null
 const INVENTORY_TTL_MS = 2 * 60 * 1000
 
 setClearAuthCaches(() => {
@@ -58,6 +59,7 @@ setClearAuthCaches(() => {
   typeGroup.clear()
   groupCategory.clear()
   inventoryCache = null
+  inventoryInFlight = null
 })
 
 interface EsiOptions {
@@ -598,7 +600,7 @@ function slotOf(flag: string): ShipSlot {
   return 'Other'
 }
 
-interface InventorySnapshot {
+export interface InventorySnapshot {
   ships: ShipInfo[]
   gear: AssetHolding[]
   materials: AssetHolding[]
@@ -867,9 +869,26 @@ async function getInventory(cid: number): Promise<InventorySnapshot> {
   if (inventoryCache && inventoryCache.cid === cid && Date.now() - inventoryCache.at < INVENTORY_TTL_MS) {
     return inventoryCache.data
   }
-  const data = await buildInventory(cid)
-  inventoryCache = { cid, at: Date.now(), data }
-  return data
+  if (inventoryInFlight?.cid === cid) return inventoryInFlight.promise
+  const promise = buildInventory(cid).then((data) => {
+    inventoryCache = { cid, at: Date.now(), data }
+    return data
+  })
+  inventoryInFlight = { cid, promise }
+  try {
+    return await promise
+  } finally {
+    if (inventoryInFlight?.promise === promise) inventoryInFlight = null
+  }
+}
+
+/** Unified cached inventory for integrations that need gear, materials, and ships together. */
+export function fetchInventorySnapshot(characterId?: number): Promise<EsiResult<InventorySnapshot>> {
+  return wrap(async () => {
+    const cid = characterId ?? getIdentity()?.characterId
+    if (!cid) throw new Error('Not logged in.')
+    return getInventory(cid)
+  })
 }
 
 /** Ships owned by the character, with their fittings/cargo/drones nested underneath. */

@@ -7,6 +7,7 @@ import { restoreSession, getAuthState, handleCallbackUrl } from './auth/sso'
 import { getSettings, saveSettings } from './store'
 import { registerProtocol, findCallbackUrl } from './protocol'
 import { initUpdater } from './updater'
+import { configureMcpServer, stopMcpServer } from './mcp/server'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -194,6 +195,7 @@ if (!gotLock) {
       registerAppProtocol()
       registerProtocol(getSettings().callbackScheme)
       registerIpc(() => mainWindow)
+      await configureMcpServer(getSettings())
       createWindow()
     } catch (e) {
       logStartup(`fatal during startup: ${(e as Error)?.stack ?? e}`)
@@ -221,5 +223,9 @@ if (!gotLock) {
 
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()
+  })
+
+  app.on('before-quit', () => {
+    void stopMcpServer()
   })
 }

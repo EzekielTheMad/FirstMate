@@ -29,6 +29,16 @@ export interface AppSettings {
   advisorBaseUrl: string
   /** Stable Hermes memory/session scope for FirstMate requests. */
   advisorSessionKey: string
+  /** Enables the read-only MCP data server used by Hermes and other agents. */
+  mcpEnabled: boolean
+  /** Bind on all interfaces instead of localhost; required for Docker/LAN clients. */
+  mcpAllowLan: boolean
+  /** TCP port for the FirstMate MCP server. */
+  mcpPort: number
+  /** Bearer secret accepted by the FirstMate MCP server (encrypted at rest). */
+  mcpApiKey: string
+  /** Explicit asset-location id treated as the player's operating home base. */
+  mcpHomeLocationId: string
   /** Renderer zoom factor (1.0 = 100%). */
   zoomFactor: number
   /** Auto-refresh interval in seconds for data views. 0 = off. */
@@ -49,6 +59,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   advisorModel: 'claude-opus-4-8',
   advisorBaseUrl: '',
   advisorSessionKey: 'firstmate',
+  mcpEnabled: false,
+  mcpAllowLan: false,
+  mcpPort: 8643,
+  mcpApiKey: '',
+  mcpHomeLocationId: '',
   zoomFactor: 1,
   autoRefreshSeconds: 0
 }
@@ -61,6 +76,10 @@ export interface PublicSettings {
   advisorModel: string
   advisorBaseUrl: string
   advisorSessionKey: string
+  mcpEnabled: boolean
+  mcpAllowLan: boolean
+  mcpPort: number
+  mcpHomeLocationId: string
   zoomFactor: number
   autoRefreshSeconds: number
   /** True if an Anthropic key is stored, without revealing it. */
@@ -71,6 +90,8 @@ export interface PublicSettings {
   hasHermesKey: boolean
   /** True if a custom endpoint key is stored, without revealing it. */
   hasCompatibleKey: boolean
+  /** True if a FirstMate MCP bearer key is stored, without revealing it. */
+  hasMcpKey: boolean
   /** True when the selected provider has enough configuration to be used. */
   advisorReady: boolean
 }
@@ -360,6 +381,26 @@ export interface AdvisorConnectionResult {
   message: string
 }
 
+export interface McpServerStatus {
+  enabled: boolean
+  running: boolean
+  host: string
+  port: number
+  endpoint: string
+  error?: string
+}
+
+export interface McpAssetLocation {
+  locationId: number
+  locationName?: string
+  itemTypeCount: number
+  totalQuantity: number
+  estimatedValue: number
+  hasGear: boolean
+  hasMaterials: boolean
+  hasShips: boolean
+}
+
 export interface AdvisorHistoryEntry {
   id: string
   goal: string
@@ -436,6 +477,10 @@ export interface FirstMateApi {
     getHistory: () => Promise<AdvisorHistoryEntry[]>
     deleteHistory: (id: string) => Promise<AdvisorHistoryEntry[]>
     clearHistory: () => Promise<AdvisorHistoryEntry[]>
+  }
+  mcp: {
+    getStatus: () => Promise<McpServerStatus>
+    listAssetLocations: () => Promise<McpAssetLocation[]>
   }
   updates: {
     getState: () => Promise<UpdateState>

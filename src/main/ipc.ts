@@ -32,6 +32,8 @@ import {
 } from './esi/client'
 import { askAdvisor } from './ai/advisor'
 import { testAdvisorConnection } from './ai/providers'
+import { configureMcpServer, getMcpServerStatus } from './mcp/server'
+import { listAssetLocations } from './mcp/tools'
 import { registerProtocol } from './protocol'
 import {
   getUpdateState,
@@ -44,10 +46,18 @@ import {
 export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // Settings
   ipcMain.handle('settings:get', () => toPublicSettings(getSettings()))
-  ipcMain.handle('settings:update', (_e, patch: Partial<AppSettings>) => {
+  ipcMain.handle('settings:update', async (_e, patch: Partial<AppSettings>) => {
     const saved = saveSettings(patch)
     // If the SSO callback scheme changed, re-register the OS protocol handler.
     if (patch.callbackScheme) registerProtocol(saved.callbackScheme)
+    if (
+      patch.mcpEnabled !== undefined ||
+      patch.mcpAllowLan !== undefined ||
+      patch.mcpPort !== undefined ||
+      patch.mcpApiKey !== undefined
+    ) {
+      await configureMcpServer(saved)
+    }
     return toPublicSettings(saved)
   })
 
@@ -85,6 +95,10 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   ipcMain.handle('advisor:getHistory', () => getAdvisorHistory())
   ipcMain.handle('advisor:deleteHistory', (_e, id: string) => deleteAdvisorHistory(id))
   ipcMain.handle('advisor:clearHistory', () => clearAdvisorHistory())
+
+  // Read-only MCP bridge used by Hermes/Discord.
+  ipcMain.handle('mcp:getStatus', () => getMcpServerStatus())
+  ipcMain.handle('mcp:listAssetLocations', () => listAssetLocations())
 
   // Updates (auth-independent)
   ipcMain.handle('updates:getState', () => getUpdateState())

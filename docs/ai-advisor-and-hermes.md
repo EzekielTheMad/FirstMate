@@ -135,21 +135,23 @@ Hermes's session-scope header isolates FirstMate-related Hermes memory; it does
 not turn the current FirstMate UI into a chat thread by itself.
 
 A Hermes Discord channel is a separate interface with its own persistent
-conversation. Connecting FirstMate to Hermes enables this direction:
+conversation. Configuring Hermes as the Advisor provider enables this direction:
 
 ```text
 FirstMate → Hermes → configured model
 ```
 
-It does **not** automatically enable this direction:
+FirstMate 0.1.16 adds a separate, optional MCP bridge for the reverse direction:
 
 ```text
 Hermes/Discord → FirstMate character data
 ```
 
-Giving a Discord agent live access to FirstMate data requires a separate,
-optional, read-only FirstMate MCP interface. Until that exists, a Discord agent
-must use values supplied in chat and must not claim it queried FirstMate or ESI.
+Enable **Settings → Hermes data access (MCP)**, generate a separate access key,
+and add the provided server block to Hermes. Discord then uses FirstMate tools
+through the normal Hermes gateway pipeline. See
+[Hermes/Discord data access](hermes-firstmate-mcp.md) for setup, security, the
+complete tool list, Docker URLs, and asset-analysis limitations.
 
 ## Troubleshooting
 

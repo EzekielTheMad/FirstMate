@@ -49,6 +49,10 @@ const api: FirstMateApi = {
     deleteHistory: (id: string) => ipcRenderer.invoke('advisor:deleteHistory', id),
     clearHistory: () => ipcRenderer.invoke('advisor:clearHistory')
   },
+  mcp: {
+    getStatus: () => ipcRenderer.invoke('mcp:getStatus'),
+    listAssetLocations: () => ipcRenderer.invoke('mcp:listAssetLocations')
+  },
   updates: {
     getState: () => ipcRenderer.invoke('updates:getState'),
     check: () => ipcRenderer.invoke('updates:check'),

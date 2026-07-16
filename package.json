@@ -1,6 +1,6 @@
 {
   "name": "firstmate",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "FirstMate — an EVE Online companion desktop app (exploration, wormholes, economy, mining, combat, and an AI advisor).",
   "author": "FirstMate",
   "license": "MIT",
@@ -19,8 +19,10 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "electron-updater": "^6.6.2",
-    "jose": "^5.10.0"
+    "jose": "^5.10.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",
