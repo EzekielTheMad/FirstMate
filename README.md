@@ -18,7 +18,7 @@ secondary monitor.
 | Tab | What it does | Data source |
 | --- | --- | --- |
 | **Dashboard** | Wallet, online status, skill points & queue, current system/region/security, active ship | Live ESI |
-| **Explore** | Local wormhole-chain & signature tracker (system class, sig IDs, WH destinations, mass/EOL status, notes) | Local (ESI does not expose WH connections) |
+| **Explore** | Local visual wormhole chain, Probe Scanner import, linked systems, independent life/mass observations, and connection history | Local (ESI does not expose WH connections) |
 | **Economy** | Wallet balance, buy/sell escrow, open market orders, wallet journal | Live ESI |
 | **Mining** | Mining ledger grouped by ore/type with average-market-price value estimates | Live ESI |
 | **Combat** | Local fittings library (EFT/pyfa paste) and tactical notes | Local |
@@ -79,6 +79,21 @@ falls back to a paid API. Character context is sent only to the provider URL you
 For the complete provider comparison, Docker/Unraid environment variables, port mapping,
 security guidance, connection tests, data-sharing details, and troubleshooting, see
 **[AI Advisor and Hermes setup](docs/ai-advisor-and-hermes.md)**.
+
+### Track a wormhole chain
+
+1. Open **Explore** and add the system you are currently in.
+2. In EVE's Probe Scanner, select and copy signature rows. Choose **Import scan** in FirstMate and
+   paste them; re-importing refreshes scanner fields without erasing notes or wormhole status.
+3. Expand a wormhole signature, enter its type, then link an existing system or choose
+   **Create destination system**. Linked systems immediately appear in the narrow chain map.
+4. Record **Life** and **Mass** independently. **Mark <4h now** timestamps the observation in EVE
+   time; it does not claim a guaranteed collapse deadline.
+5. **Close connection** when a hole disappears. Closed connections and archived systems remain
+   recoverable instead of being silently deleted.
+
+See **[Explore and wormhole chain tracking](docs/exploration-chain.md)** for field meanings,
+scanner-paste examples, migration behavior, and recovery tips.
 
 > FirstMate currently saves successful answers as local history, but each **Get advice** request is
 > independent. The Hermes session scope isolates FirstMate-related Hermes memory; it does not make

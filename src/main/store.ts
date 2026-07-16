@@ -11,6 +11,7 @@ import {
   AdvisorHistoryEntry
 } from '@shared/types'
 import { isAdvisorReady, resolveAdvisorProvider } from '@shared/advisor-settings'
+import { normalizeExplorationState } from '@shared/exploration'
 
 /**
  * Small JSON-file persistence layer living in the Electron userData dir.
@@ -189,12 +190,13 @@ const EXPLORATION_FILE = 'exploration.json'
 const COMBAT_FILE = 'combat.json'
 
 export function getExploration(): ExplorationState {
-  return readJson<ExplorationState>(EXPLORATION_FILE, { systems: [] })
+  return normalizeExplorationState(readJson<unknown>(EXPLORATION_FILE, { systems: [] }))
 }
 
 export function saveExploration(state: ExplorationState): ExplorationState {
-  writeJson(EXPLORATION_FILE, state)
-  return state
+  const normalized = normalizeExplorationState(state)
+  writeJson(EXPLORATION_FILE, normalized)
+  return normalized
 }
 
 export function getCombat(): CombatSnapshot {

@@ -286,10 +286,22 @@ export interface WormholeSignature {
   name: string
   /** For wormholes: destination class / type, e.g. "C3", "HS", "K162". */
   destination?: string
-  /** For wormholes: mass/life status. */
+  /** Legacy combined status, retained only so older local data can be migrated. */
   status?: 'stable' | 'reduced' | 'critical' | 'eol' | 'fresh'
-  /** Epoch ms when this signature was most recently marked end-of-life. */
+  /** Reliable lifetime state observed in game. */
+  life?: 'unknown' | 'over-day' | 'under-day' | 'under-4h' | 'under-1h' | 'expired'
+  /** Independent remaining-mass state observed in game. */
+  mass?: 'unknown' | 'stable' | 'reduced' | 'critical'
+  /** Epoch ms when the current lifetime state was observed. */
+  lifeObservedAt?: number
+  /** Legacy EOL timestamp, retained only for migration. */
   eolMarkedAt?: number
+  /** Wormhole code observed on this side, e.g. H296 or K162. */
+  wormholeType?: string
+  /** A real, navigable connection to another tracked system. */
+  destinationSystemId?: string
+  /** Closed connections remain in local history and can be restored. */
+  closedAt?: number
   notes?: string
   createdAt: number
   updatedAt: number
@@ -305,11 +317,15 @@ export interface WormholeSystem {
   notes?: string
   createdAt: number
   updatedAt: number
+  archivedAt?: number
 }
 
 export interface ExplorationState {
+  schemaVersion?: 2
   systems: WormholeSystem[]
   activeSystemId?: string
+  rootSystemId?: string
+  helpDismissed?: boolean
 }
 
 export interface CombatSnapshot {

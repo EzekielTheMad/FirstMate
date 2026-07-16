@@ -3,6 +3,28 @@
 All notable changes to FirstMate are documented here. This file is the source
 of the release notes shown in the app's updater.
 
+## [0.1.15] - 2026-07-16
+
+### Added
+- Explore now displays a narrow-friendly visual chain with linked destination
+  systems, selectable roots, cycle handling, and visible unlinked holes.
+- Probe Scanner rows can be pasted in bulk and safely reconciled by signature
+  ID without erasing notes, links, or lifecycle observations.
+- Wormholes now track Life and Mass independently using current reliable-life
+  thresholds, editable EVE-time observations, and a one-click **Mark <4h now**.
+- Destination systems can be created or linked directly from a wormhole.
+  Connections can be closed/restored and systems archived/restored.
+- Added in-app workflow help, field tooltips, explicit permanent-delete
+  confirmations, and Saving/Saved/Retry feedback.
+
+### Changed
+- Explore was redesigned for FirstMate's 480px default window with stacked
+  forms, compact topology rows, and progressive signature details.
+- Existing local chains migrate automatically. Legacy combined statuses are
+  split conservatively without inventing an unobserved Life or Mass value.
+- EOL tracking no longer presents a deterministic collapse countdown; it shows
+  when the in-game state was observed and prompts the player to recheck.
+
 ## [0.1.14] - 2026-07-16
 
 ### Added
