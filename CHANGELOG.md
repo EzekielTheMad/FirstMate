@@ -3,6 +3,19 @@
 All notable changes to FirstMate are documented here. This file is the source
 of the release notes shown in the app's updater.
 
+## [0.1.14] - 2026-07-16
+
+### Added
+- Wormhole signatures marked **EOL** now record when the status was set and
+  show elapsed time plus the conservative four-hour collapse window.
+
+### Fixed
+- **Explore → + System** now uses an in-app form instead of Electron's
+  unsupported browser prompt, so systems can actually be added in packaged
+  builds.
+- Explore deletions now use an in-app confirmation, and local chain load/save
+  failures are shown instead of failing silently.
+
 ## [0.1.13] - 2026-07-16
 
 ### Added

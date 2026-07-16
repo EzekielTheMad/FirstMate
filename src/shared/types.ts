@@ -288,6 +288,8 @@ export interface WormholeSignature {
   destination?: string
   /** For wormholes: mass/life status. */
   status?: 'stable' | 'reduced' | 'critical' | 'eol' | 'fresh'
+  /** Epoch ms when this signature was most recently marked end-of-life. */
+  eolMarkedAt?: number
   notes?: string
   createdAt: number
   updatedAt: number
