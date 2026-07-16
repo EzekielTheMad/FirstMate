@@ -76,6 +76,15 @@ Choose one provider in **Settings → AI Advisor**:
 Use **Test connection** before opening the Advisor. FirstMate never silently switches providers or
 falls back to a paid API. Character context is sent only to the provider URL you select.
 
+For the complete provider comparison, Docker/Unraid environment variables, port mapping,
+security guidance, connection tests, data-sharing details, and troubleshooting, see
+**[AI Advisor and Hermes setup](docs/ai-advisor-and-hermes.md)**.
+
+> FirstMate currently saves successful answers as local history, but each **Get advice** request is
+> independent. The Hermes session scope isolates FirstMate-related Hermes memory; it does not make
+> the current Advisor UI multi-turn. A Discord Hermes agent also needs a future, separate read-only
+> FirstMate MCP connection before it can query live FirstMate data.
+
 ### Run from source
 
 ```bash
