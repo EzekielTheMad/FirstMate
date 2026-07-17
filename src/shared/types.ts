@@ -351,6 +351,8 @@ export interface ExplorationState {
   activeSystemId?: string
   rootSystemId?: string
   helpDismissed?: boolean
+  /** Optional beginner-oriented labels for pasted exploration sites. */
+  showSiteGuidance?: boolean
 }
 
 export interface ExplorationContext {

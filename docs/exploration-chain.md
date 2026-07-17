@@ -74,6 +74,30 @@ The bundled lookup data is generated from CCP's official Static Data Export. Sta
 connections are intentionally absent from that export, so FirstMate cannot safely infer a live chain
 from account access alone.
 
+## Optional site guidance
+
+Turn on **Site guidance** in the Explore toolbar to add beginner-oriented labels to pasted scanner
+results. Guidance uses the resolved group, site name, and current system class:
+
+- **Lower PvE risk** means FirstMate did not recognize a special NPC or environmental hazard. It
+  does not mean safe; other players can enter, and unknown or changed mechanics are still possible.
+- **Caution** highlights travel and gas-site risks that need more information or preparation.
+- **Dangerous mechanics** flags recognized Ghost Sites, Sleeper Caches, Unsecured/Forgotten Sleeper
+  sites, and combat sites.
+- **Unknown risk** means the scan needs to be resolved further or the name is not recognized.
+
+The toggle is off by default and is saved locally. These labels assume a newer pilot in a typical
+exploration frigate and are intentionally conservative. Always check the exact site and local/d-scan
+before committing a ship.
+
+## Offline-data update cadence
+
+FirstMate includes its system and wormhole-type lookup in the installer, so autocomplete works
+offline. A scheduled GitHub workflow checks CCP's latest SDE build every Wednesday. When CCP's build
+number changes, it regenerates the compact lookup, runs type checking and all tests, and opens a pull
+request for review. It does not publish an app release automatically; the reviewed data ships with
+the next FirstMate release. Maintainers can also run the workflow manually after a major EVE update.
+
 ## Local data and upgrades
 
 Explore data is stored in FirstMate's local application-data directory. Upgrading from 0.1.14 or

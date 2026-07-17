@@ -4,6 +4,7 @@ import {
   buildChainRows,
   createSystem,
   formatShortDuration,
+  getSiteRiskGuidance,
   normalizeExplorationState,
   parseScannerResults,
   upsertScannerRows
@@ -96,5 +97,23 @@ describe('exploration data', () => {
   it('formats elapsed observation time without claiming a deadline', () => {
     expect(formatShortDuration(30 * 60_000)).toBe('30m')
     expect(formatShortDuration(2 * 60 * 60_000 + 15 * 60_000)).toBe('2h 15m')
+  })
+
+  it('keeps beginner site guidance opt-in during normalization', () => {
+    expect(normalizeExplorationState({ systems: [] }).showSiteGuidance).toBe(false)
+    expect(normalizeExplorationState({ systems: [], showSiteGuidance: true }).showSiteGuidance).toBe(true)
+  })
+
+  it('flags named special hazards without calling ordinary hacking sites safe', () => {
+    expect(getSiteRiskGuidance({ group: 'data', name: 'Lesser Covert Research Facility' }, 'HS').level).toBe('danger')
+    expect(getSiteRiskGuidance({ group: 'relic', name: 'Forgotten Perimeter Coronation Platform' }, 'C2')).toMatchObject({
+      level: 'danger',
+      label: 'Sleeper combat site'
+    })
+    expect(getSiteRiskGuidance({ group: 'relic', name: 'Ruined Serpentis Monument Site' }, 'HS')).toMatchObject({
+      level: 'lower',
+      label: 'Lower PvE risk'
+    })
+    expect(getSiteRiskGuidance({ group: 'data', name: '' }, 'HS').level).toBe('unknown')
   })
 })

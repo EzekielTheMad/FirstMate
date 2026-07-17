@@ -940,6 +940,28 @@ button.chain-unlinked {
 .type-hint.warning { border-color: rgba(245, 181, 68, .35); color: var(--amber); }
 .connection-status { background: rgba(245, 181, 68, .05); color: var(--amber); margin: 7px 0; }
 .connection-status.linked { background: rgba(52, 211, 153, .05); color: var(--green); }
+.site-guidance {
+  display: grid;
+  gap: 3px;
+  margin: 8px 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  background: rgba(148, 163, 184, .05);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.site-guidance strong { color: var(--text); }
+.site-guidance small { color: var(--text-faint); }
+.site-guidance.lower { border-left-color: var(--green); background: rgba(52, 211, 153, .05); }
+.site-guidance.caution { border-left-color: var(--amber); background: rgba(245, 181, 68, .05); }
+.site-guidance.danger { border-left-color: var(--red); background: rgba(248, 113, 113, .06); }
+.site-guidance.unknown { border-left-color: var(--text-faint); }
+.chip.site-risk.lower { color: var(--green); border-color: rgba(52, 211, 153, .3); }
+.chip.site-risk.caution { color: var(--amber); border-color: rgba(245, 181, 68, .3); }
+.chip.site-risk.danger { color: var(--red); border-color: rgba(248, 113, 113, .3); }
+.chip.site-risk.unknown { color: var(--text-faint); }
 .system-metadata { margin: -8px 0 12px; }
 
 .closed-section {

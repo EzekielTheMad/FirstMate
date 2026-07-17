@@ -106,7 +106,88 @@ export function normalizeExplorationState(input: unknown): ExplorationState {
     systems,
     activeSystemId,
     rootSystemId,
-    helpDismissed: raw.helpDismissed ?? false
+    helpDismissed: raw.helpDismissed ?? false,
+    showSiteGuidance: raw.showSiteGuidance ?? false
+  }
+}
+
+export type SiteRiskLevel = 'lower' | 'caution' | 'danger' | 'unknown'
+
+export interface SiteRiskGuidance {
+  level: SiteRiskLevel
+  label: string
+  summary: string
+}
+
+const HIGH_DANGER_SITE = /(?:covert research facility|besieged research facility|sleeper cache)/i
+const SLEEPER_SITE = /(?:forgotten|unsecured)/i
+
+/**
+ * Beginner-oriented PvE guidance derived only from scanner text and system class.
+ * This deliberately avoids the word "safe": scanner results cannot measure player threat,
+ * ship suitability, site escalation, or whether another pilot is already inside.
+ */
+export function getSiteRiskGuidance(
+  signature: Pick<WormholeSignature, 'group' | 'name'>,
+  systemClass?: string
+): SiteRiskGuidance {
+  const name = signature.name.trim()
+  const normalizedClass = systemClass?.trim() ?? ''
+  const inWormholeSpace = /^C[1-6]$/i.test(normalizedClass) || /^(?:Thera|Shattered|Sentinel|Barbican|Vidette|Conflux|Redoubt)$/i.test(normalizedClass)
+
+  if (HIGH_DANGER_SITE.test(name)) {
+    return {
+      level: 'danger',
+      label: 'Dangerous mechanics',
+      summary: 'Timed explosions, environmental damage, or hostile NPC mechanics may destroy an exploration frigate.'
+    }
+  }
+  if (SLEEPER_SITE.test(name) && (inWormholeSpace || signature.group === 'data' || signature.group === 'relic')) {
+    return {
+      level: 'danger',
+      label: 'Sleeper combat site',
+      summary: 'Unsecured and Forgotten sites contain hostile Sleepers; do not treat them as ordinary hacking sites.'
+    }
+  }
+  if (signature.group === 'combat') {
+    return {
+      level: 'danger',
+      label: 'Combat expected',
+      summary: 'Hostile NPCs are expected. Check the exact site and bring a suitable combat ship.'
+    }
+  }
+  if (signature.group === 'gas') {
+    return {
+      level: 'caution',
+      label: 'NPC risk',
+      summary: 'Gas sites can contain or later spawn hostile NPCs. Identify the exact site before lingering.'
+    }
+  }
+  if (signature.group === 'wormhole') {
+    return {
+      level: 'caution',
+      label: 'Travel risk',
+      summary: 'The destination and other side may be hostile. Check the hole, polarization, mass, and return route.'
+    }
+  }
+  if ((signature.group === 'data' || signature.group === 'relic') && !name) {
+    return {
+      level: 'unknown',
+      label: 'Scan further',
+      summary: 'Resolve the site to 100% so FirstMate can check its name for special hazards.'
+    }
+  }
+  if (signature.group === 'data' || signature.group === 'relic') {
+    return {
+      level: 'lower',
+      label: 'Lower PvE risk',
+      summary: 'No special hazard was recognized in this site name. Players and unrecognized mechanics can still be dangerous.'
+    }
+  }
+  return {
+    level: 'unknown',
+    label: 'Unknown risk',
+    summary: 'FirstMate does not have enough scanner information to rate this site.'
   }
 }
 

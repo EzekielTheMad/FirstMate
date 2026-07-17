@@ -18,7 +18,7 @@ secondary monitor.
 | Tab | What it does | Data source |
 | --- | --- | --- |
 | **Dashboard** | Wallet, online status, skill points & queue, current system/region/security, active ship | Live ESI |
-| **Explore** | Live-system detection, EVE system/class autocomplete, Probe Scanner import, guided wormhole linking, type limits, independent life/mass observations, and connection history | ESI + local observations |
+| **Explore** | Live-system detection, EVE system/class autocomplete, Probe Scanner import, optional beginner site-risk guidance, guided wormhole linking, type limits, independent life/mass observations, and connection history | ESI + local observations |
 | **Economy** | Wallet balance, buy/sell escrow, open market orders, wallet journal | Live ESI |
 | **Mining** | Mining ledger grouped by ore/type with average-market-price value estimates | Live ESI |
 | **Combat** | Local fittings library (EFT/pyfa paste) and tactical notes | Local |
@@ -95,6 +95,11 @@ security guidance, connection tests, data-sharing details, and troubleshooting, 
    time; it does not claim a guaranteed collapse deadline.
 5. **Close connection** when a hole disappears. Closed connections and archived systems remain
    recoverable instead of being silently deleted.
+
+For beginner help, turn on **Site guidance** in the Explore toolbar. It flags recognized dangerous
+mechanics and lower-PvE-risk hacking sites without ever claiming that a site is safe from players.
+The bundled offline EVE lookup is checked weekly against CCP's current Static Data Export; reviewed
+updates are included in subsequent FirstMate releases.
 
 See **[Explore and wormhole chain tracking](docs/exploration-chain.md)** for field meanings,
 scanner-paste examples, automatic versus player-confirmed data, migration behavior, and recovery tips.

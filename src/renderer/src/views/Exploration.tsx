@@ -13,6 +13,7 @@ import {
   buildChainRows,
   createSystem,
   formatShortDuration,
+  getSiteRiskGuidance,
   LIFE_LABELS,
   LIFE_OPTIONS,
   MASS_LABELS,
@@ -120,6 +121,26 @@ function WormholeTypeHint({ code }: { code?: string }): JSX.Element | null {
       {reference.totalMassKg && <span>Total mass {formatMass(reference.totalMassKg)}</span>}
       {reference.maxJumpMassKg && <span>Max jump {formatMass(reference.maxJumpMassKg)}</span>}
       <small>Static type limits only; observed Life and Mass in game take priority.</small>
+    </div>
+  )
+}
+
+function SiteGuidance({
+  signature,
+  systemClass,
+  compact = false
+}: {
+  signature: WormholeSignature
+  systemClass?: string
+  compact?: boolean
+}): JSX.Element {
+  const guidance = getSiteRiskGuidance(signature, systemClass)
+  if (compact) return <span className={`chip site-risk ${guidance.level}`}>{guidance.label}</span>
+  return (
+    <div className={`site-guidance ${guidance.level}`}>
+      <strong>{guidance.label}</strong>
+      <span>{guidance.summary}</span>
+      <small>PvE estimate only · other players can make any site dangerous.</small>
     </div>
   )
 }
@@ -486,6 +507,15 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
                 Import scan
               </button>
             </Tooltip>
+            <Tooltip content="Optional beginner PvE guidance from the pasted site name. It cannot measure player threat or guarantee safety.">
+              <button
+                className={`btn sm ${currentState.showSiteGuidance ? 'active' : ''}`}
+                aria-pressed={Boolean(currentState.showSiteGuidance)}
+                onClick={() => persist({ ...currentState, showSiteGuidance: !currentState.showSiteGuidance })}
+              >
+                Site guidance: {currentState.showSiteGuidance ? 'On' : 'Off'}
+              </button>
+            </Tooltip>
             <button className="btn sm" onClick={() => setAddingSystem((open) => !open)}>
               {addingSystem ? 'Cancel' : '+ System'}
             </button>
@@ -502,6 +532,7 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
               <li>Choose Import scan, paste with Ctrl+V, and import the signatures.</li>
               <li>After jumping, link the detected arrival system to the signature you used.</li>
               <li>Update Life and Mass as you observe them; close the connection when it disappears.</li>
+              <li>Optionally turn on Site guidance for beginner PvE warnings after a scan is resolved.</li>
             </ol>
             <div className="hint">
               ESI can detect where you are. Signature results and wormhole connections still come from your observations, and the chain is saved only on this computer.
@@ -667,6 +698,7 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
                     <span className={`chip ${GROUP_CHIP[signature.group]}`}>{signature.group}</span>
                     {signature.group === 'wormhole' && <span className={`chip ${lifeTone(signature.life)}`}>{LIFE_LABELS[signature.life ?? 'unknown']}</span>}
                     {signature.group === 'wormhole' && <span className={`chip ${massTone(signature.mass)}`}>{MASS_LABELS[signature.mass ?? 'unknown']}</span>}
+                    {state.showSiteGuidance && <SiteGuidance signature={signature} systemClass={active.systemClass} compact />}
                   </summary>
                   <div className="signature-body">
                     <div className="signature-base-fields">
@@ -732,6 +764,8 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
                     ) : (
                       <div className="field-group"><label className="field-label">Site name</label><input className="field" value={signature.name} onChange={(event) => updateSignature(signature.id, { name: event.target.value })} /></div>
                     )}
+
+                    {state.showSiteGuidance && <SiteGuidance signature={signature} systemClass={active.systemClass} />}
 
                     <div className="field-group"><label className="field-label">Notes</label><textarea className="field compact-textarea" value={signature.notes ?? ''} onChange={(event) => updateSignature(signature.id, { notes: event.target.value })} /></div>
                     <div className="signature-actions">

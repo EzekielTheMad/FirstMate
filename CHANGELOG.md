@@ -3,6 +3,23 @@
 All notable changes to FirstMate are documented here. This file is the source
 of the release notes shown in the app's updater.
 
+## [0.1.18] - 2026-07-17
+
+### Added
+- Explore has an opt-in **Site guidance** toggle that labels pasted signatures
+  as lower PvE risk, caution, dangerous mechanics, or unknown. Recognized Ghost
+  Sites, Sleeper Caches, Sleeper hacking sites, gas sites, combat sites, and
+  wormhole travel receive beginner-oriented explanations.
+- A scheduled GitHub workflow checks CCP's official SDE build every Wednesday,
+  regenerates the compact offline lookup when it changes, validates it, and
+  opens or refreshes a reviewable update pull request.
+
+### Changed
+- Site guidance consistently distinguishes PvE estimates from player danger
+  and never describes an EVE site as guaranteed safe.
+- Offline-data updates remain review-gated and ship with the next app release
+  instead of publishing an unattended installer.
+
 ## [0.1.17] - 2026-07-17
 
 ### Added

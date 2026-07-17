@@ -1,0 +1,92 @@
+name: Update EVE exploration data
+
+on:
+  schedule:
+    # Weekly, after the normal Wednesday Tranquility downtime window.
+    - cron: '30 13 * * 3'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-eve-exploration-data
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Check CCP's latest SDE build
+        id: latest
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --location \
+            https://developers.eveonline.com/static-data/tranquility/latest.jsonl \
+            --output "$RUNNER_TEMP/latest.jsonl"
+          LATEST_BUILD=$(node -e "const fs=require('fs'); const rows=fs.readFileSync(process.argv[1],'utf8').trim().split(/\\r?\\n/).map(JSON.parse); const row=rows.find(x=>x._key==='sde'); const build=row?.buildNumber ?? row?._value ?? row?.value; if(!build) process.exit(1); process.stdout.write(String(build))" "$RUNNER_TEMP/latest.jsonl")
+          BUNDLED_BUILD=$(node -e "const data=require('./src/shared/data/exploration-static.json'); process.stdout.write(String(data.source.buildNumber))")
+          echo "latest=$LATEST_BUILD" >> "$GITHUB_OUTPUT"
+          echo "bundled=$BUNDLED_BUILD" >> "$GITHUB_OUTPUT"
+          if [ "$LATEST_BUILD" = "$BUNDLED_BUILD" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download current official SDE
+        if: steps.latest.outputs.changed == 'true'
+        shell: bash
+        run: |
+          mkdir -p .tmp/sde
+          curl --fail --silent --show-error --location \
+            https://developers.eveonline.com/static-data/eve-online-static-data-latest-jsonl.zip \
+            --output "$RUNNER_TEMP/eve-sde.zip"
+          unzip -q "$RUNNER_TEMP/eve-sde.zip" -d .tmp/sde
+
+      - name: Regenerate compact offline exploration data
+        if: steps.latest.outputs.changed == 'true'
+        run: node scripts/generate-exploration-static-data.mjs .tmp/sde src/shared/data/exploration-static.json
+
+      - name: Validate generated data
+        if: steps.latest.outputs.changed == 'true'
+        run: |
+          npm ci
+          npm run typecheck
+          npm test -- --run
+
+      - name: Open or refresh update pull request
+        if: steps.latest.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LATEST_BUILD: ${{ steps.latest.outputs.latest }}
+          BUNDLED_BUILD: ${{ steps.latest.outputs.bundled }}
+        run: |
+          if git diff --quiet -- src/shared/data/exploration-static.json; then
+            echo "CCP build changed but the compact exploration data did not."
+            exit 0
+          fi
+          BRANCH=automation/update-eve-exploration-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add src/shared/data/exploration-static.json
+          git commit -m "chore: update EVE exploration data to build $LATEST_BUILD"
+          git push --force origin "$BRANCH"
+          BODY="Updates FirstMate's bundled offline exploration lookup from CCP SDE build $BUNDLED_BUILD to $LATEST_BUILD. The workflow regenerated the compact data and passed type checking plus the complete test suite."
+          if gh pr view "$BRANCH" >/dev/null 2>&1; then
+            gh pr edit "$BRANCH" --title "chore: update EVE exploration data to build $LATEST_BUILD" --body "$BODY"
+          else
+            gh pr create --base "${GITHUB_REF_NAME}" --head "$BRANCH" --title "chore: update EVE exploration data to build $LATEST_BUILD" --body "$BODY"
+          fi
