@@ -346,28 +346,37 @@ export function registerFirstMateTools(server: McpServer): void {
   }, async () => safeTool(async () => toolResult(unwrap(await fetchClones()))))
 
   server.registerTool('get_exploration_chain', {
-    description: 'Get the locally tracked wormhole chain, linked systems, signatures, life/mass observations, notes, and optional closed/archived history.',
-    inputSchema: { include_archived: z.boolean().default(false), include_closed: z.boolean().default(false) }
-  }, async ({ include_archived, include_closed }) => safeTool(async () => {
+    description: 'Get one locally tracked wormhole map with linked systems, signatures, life/mass observations, and notes. Defaults to the active map.',
+    inputSchema: { map_id: z.string().optional(), map_name: z.string().optional(), include_archived: z.boolean().default(false), include_closed: z.boolean().default(false) }
+  }, async ({ map_id, map_name, include_archived, include_closed }) => safeTool(async () => {
     const state = getExploration()
-    const systems = state.systems.filter((system) => include_archived || !system.archivedAt).map((system) => ({ ...system, signatures: system.signatures.filter((signature) => include_closed || !signature.closedAt) }))
-    return toolResult({ rootSystemId: state.rootSystemId, activeSystemId: state.activeSystemId, systems }, ['Exploration data is manually observed and stored locally; it is not live ESI data.'])
+    const map = state.maps.find((item) => (map_id && item.id === map_id) || (map_name && item.name.toLowerCase() === map_name.toLowerCase()))
+      ?? state.maps.find((item) => item.id === state.activeMapId)
+      ?? state.maps[0]
+    if (!map) throw new Error('No exploration maps have been saved yet.')
+    const systems = map.systems.filter((system) => include_archived || !system.archivedAt).map((system) => ({ ...system, signatures: system.signatures.filter((signature) => include_closed || !signature.closedAt) }))
+    const availableMaps = state.maps.map((item) => ({ id: item.id, name: item.name, archivedAt: item.archivedAt, systemCount: item.systems.length }))
+    return toolResult({ map: { ...map, systems }, availableMaps, activeMapId: state.activeMapId }, ['Exploration data is manually observed and stored locally; it is not live ESI data.'])
   }))
 
   server.registerTool('get_exploration_system', {
     description: 'Find one locally tracked exploration system by exact id or case-insensitive name.',
-    inputSchema: { system_id: z.string().optional(), name: z.string().optional(), include_closed: z.boolean().default(false) }
-  }, async ({ system_id, name, include_closed }) => safeTool(async () => {
+    inputSchema: { map_id: z.string().optional(), map_name: z.string().optional(), system_id: z.string().optional(), name: z.string().optional(), include_closed: z.boolean().default(false) }
+  }, async ({ map_id, map_name, system_id, name, include_closed }) => safeTool(async () => {
     const state = getExploration()
-    const system = state.systems.find((item) => (system_id && item.id === system_id) || (name && item.name.toLowerCase() === name.toLowerCase()))
+    const maps = map_id || map_name
+      ? state.maps.filter((map) => (map_id && map.id === map_id) || (map_name && map.name.toLowerCase() === map_name.toLowerCase()))
+      : [...state.maps.filter((map) => map.id === state.activeMapId), ...state.maps.filter((map) => map.id !== state.activeMapId)]
+    const owner = maps.find((map) => map.systems.some((item) => (system_id && item.id === system_id) || (name && item.name.toLowerCase() === name.toLowerCase())))
+    const system = owner?.systems.find((item) => (system_id && item.id === system_id) || (name && item.name.toLowerCase() === name.toLowerCase()))
     if (!system) throw new Error('Exploration system not found. Call get_exploration_chain first.')
-    return toolResult({ ...system, signatures: system.signatures.filter((signature) => include_closed || !signature.closedAt) }, ['Exploration data is manually observed and stored locally; it is not live ESI data.'])
+    return toolResult({ map: owner && { id: owner.id, name: owner.name }, ...system, signatures: system.signatures.filter((signature) => include_closed || !signature.closedAt) }, ['Exploration data is manually observed and stored locally; it is not live ESI data.'])
   }))
 
   server.registerTool('get_wormhole_alerts', {
     description: 'List player-observed wormholes with short life, expired life, critical mass, or closed status.', inputSchema: {}
   }, async () => safeTool(async () => {
-    const alerts = getExploration().systems.flatMap((system) => system.signatures.filter((signature) => signature.group === 'wormhole' && (signature.closedAt || signature.mass === 'critical' || ['under-day', 'under-4h', 'under-1h', 'expired'].includes(signature.life ?? ''))).map((signature) => ({ system: { id: system.id, name: system.name }, signature })))
+    const alerts = getExploration().maps.filter((map) => !map.archivedAt).flatMap((map) => map.systems.flatMap((system) => system.signatures.filter((signature) => signature.group === 'wormhole' && (signature.closedAt || signature.mass === 'critical' || ['under-day', 'under-4h', 'under-1h', 'expired'].includes(signature.life ?? ''))).map((signature) => ({ map: { id: map.id, name: map.name }, system: { id: system.id, name: system.name }, signature }))))
     return toolResult({ alerts }, ['These are player-recorded observations. Recheck wormholes in game before committing a route.'])
   }))
 

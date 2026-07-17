@@ -18,7 +18,7 @@ secondary monitor.
 | Tab | What it does | Data source |
 | --- | --- | --- |
 | **Dashboard** | Wallet, online status, skill points & queue, current system/region/security, active ship | Live ESI |
-| **Explore** | Live-system detection, EVE system/class autocomplete, Probe Scanner import, optional beginner site-risk guidance, guided wormhole linking, type limits, independent life/mass observations, and connection history | ESI + local observations |
+| **Explore** | Multiple autosaved chain maps, pan/zoom node graph, portable share codes/files, live-system detection, system autocomplete, Probe Scanner import, optional beginner guidance, and independent life/mass observations | ESI + local observations |
 | **Economy** | Wallet balance, buy/sell escrow, open market orders, wallet journal | Live ESI |
 | **Mining** | Mining ledger grouped by ore/type with average-market-price value estimates | Live ESI |
 | **Combat** | Local fittings library (EFT/pyfa paste) and tactical notes | Local |
@@ -83,7 +83,8 @@ security guidance, connection tests, data-sharing details, and troubleshooting, 
 
 ### Track a wormhole chain
 
-1. Open **Explore** and use the live ESI location card, or start typing a system name/J-code under
+1. Open **Explore**, name the current map or choose **+ New map**, and use the live ESI location
+   card—or start typing a system name/J-code under
    **+ System**. FirstMate suggests official systems and fills known class/effect data.
 2. In EVE's Probe Scanner, click the results list, press **Ctrl+A** then **Ctrl+C**. Choose
    **Import scan** in FirstMate, click the paste box, and press **Ctrl+V**. Re-importing refreshes
@@ -95,6 +96,15 @@ security guidance, connection tests, data-sharing details, and troubleshooting, 
    time; it does not claim a guaranteed collapse deadline.
 5. **Close connection** when a hole disappears. Closed connections and archived systems remain
    recoverable instead of being silently deleted.
+
+The chain is displayed as a pan-and-zoom node graph. Select systems or connection labels to edit
+their details, and open **Compact chain list** when a linear view is easier. Maps are independent:
+archive an entire finished expedition, duplicate it before experimenting, or switch back later.
+
+Choose **Share** to copy a compressed `FMAP1G:` import string, copy a readable Discord summary, or
+export a `.firstmate-map.json` file. **Import** accepts pasted share codes/JSON plus selected or
+dropped map files. Imports create a new map and never overwrite an existing one. Exports contain no
+credentials or other maps, but are not encrypted.
 
 For beginner help, turn on **Site guidance** in the Explore toolbar. It flags recognized dangerous
 mechanics and lower-PvE-risk hacking sites without ever claiming that a site is safe from players.

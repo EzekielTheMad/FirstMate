@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { ExplorationState, WormholeSignature, WormholeSystem } from '@shared/types'
+import type { ExplorationMap, WormholeSignature, WormholeSystem } from '@shared/types'
 import {
   buildChainRows,
+  createReadableMapSummary,
   createSystem,
   formatShortDuration,
   getSiteRiskGuidance,
@@ -42,11 +43,12 @@ describe('exploration data', () => {
         { ...signature('DEF-456'), life: undefined, mass: undefined, status: 'critical' }
       ])]
     })
-    expect(migrated.schemaVersion).toBe(2)
-    expect(migrated.rootSystemId).toBe('a')
-    expect(migrated.systems[0].signatures[0]).toMatchObject({ life: 'under-4h', mass: 'unknown', lifeObservedAt: 500 })
-    expect(migrated.systems[0].signatures[1]).toMatchObject({ life: 'unknown', mass: 'critical' })
-    expect(migrated.systems[0].signatures[0].status).toBeUndefined()
+    expect(migrated.schemaVersion).toBe(3)
+    expect(migrated.activeMapId).toBe('map-1')
+    expect(migrated.maps[0].rootSystemId).toBe('a')
+    expect(migrated.maps[0].systems[0].signatures[0]).toMatchObject({ life: 'under-4h', mass: 'unknown', lifeObservedAt: 500 })
+    expect(migrated.maps[0].systems[0].signatures[1]).toMatchObject({ life: 'unknown', mass: 'critical' })
+    expect(migrated.maps[0].systems[0].signatures[0].status).toBeUndefined()
   })
 
   it('normalization is idempotent', () => {
@@ -80,9 +82,13 @@ describe('exploration data', () => {
   })
 
   it('builds a rooted chain, includes disconnected systems, and guards cycles', () => {
-    const state: ExplorationState = {
-      schemaVersion: 2,
+    const state: ExplorationMap = {
+      id: 'map-a',
+      name: 'Test chain',
       rootSystemId: 'a',
+      activeSystemId: 'a',
+      createdAt: 1,
+      updatedAt: 1,
       systems: [
         system('a', [signature('AAA-111', 'b')]),
         system('b', [signature('BBB-222', 'a')]),
@@ -92,6 +98,8 @@ describe('exploration data', () => {
     expect(buildChainRows(state).map((row) => [row.system.id, row.depth, Boolean(row.cycle)])).toEqual([
       ['a', 0, false], ['b', 1, false], ['a', 2, true], ['c', 0, false]
     ])
+    expect(createReadableMapSummary(state)).toContain('FirstMate map: Test chain')
+    expect(createReadableMapSummary(state)).toContain('↳ B — AAA-111')
   })
 
   it('formats elapsed observation time without claiming a deadline', () => {

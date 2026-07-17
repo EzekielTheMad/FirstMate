@@ -345,11 +345,24 @@ export interface WormholeSystem {
   archivedAt?: number
 }
 
-export interface ExplorationState {
-  schemaVersion?: 2
+export interface ExplorationMap {
+  id: string
+  name: string
   systems: WormholeSystem[]
   activeSystemId?: string
   rootSystemId?: string
+  notes?: string
+  createdAt: number
+  updatedAt: number
+  archivedAt?: number
+  /** Optional user-adjusted positions used by the visual chain map. */
+  nodePositions?: Record<string, { x: number; y: number }>
+}
+
+export interface ExplorationState {
+  schemaVersion?: 3
+  maps: ExplorationMap[]
+  activeMapId?: string
   helpDismissed?: boolean
   /** Optional beginner-oriented labels for pasted exploration sites. */
   showSiteGuidance?: boolean

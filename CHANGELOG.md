@@ -3,6 +3,33 @@
 All notable changes to FirstMate are documented here. This file is the source
 of the release notes shown in the app's updater.
 
+## [0.1.19] - 2026-07-17
+
+### Added
+- Explore now stores multiple independent, autosaved chain maps with a map
+  picker plus New, Duplicate, Archive, Restore, and inline rename workflows.
+- Added a pan-and-zoom visual graph with selectable system nodes and connection
+  labels, current-location highlighting, system stats, and urgent-hole badges.
+- Maps can be shared as compressed `FMAP1G:` clipboard strings, readable text
+  summaries, or formatted `.firstmate-map.json` files.
+- Import accepts pasted share codes or JSON plus selected and dropped files,
+  validates the payload, and always creates a separate map.
+- Hermes exploration tools can select maps by id/name, enumerate available
+  maps, search systems across maps, and report alerts with map context.
+
+### Changed
+- Existing single-chain data migrates automatically into a **Current chain**
+  map while preserving systems, signatures, links, notes, and observations.
+- Whole-map archive replaces individual-system archive as the primary lifecycle
+  workflow. Previously archived systems remain restorable for compatibility.
+- The compact tree remains available as an accessible fallback beneath the
+  visual graph.
+
+### Security
+- Map imports enforce version, type, group, count, and size validation. Exports
+  include only the selected map and never include ESI/API credentials or other
+  FirstMate data. The UI clearly warns that map exports are not encrypted.
+
 ## [0.1.18] - 2026-07-17
 
 ### Added

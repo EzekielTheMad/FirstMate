@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent } from 'react'
-import type { ExplorationContext, ExplorationState, WormholeSignature, WormholeSystem } from '@shared/types'
+import type { ExplorationContext, ExplorationMap, ExplorationState, WormholeSignature, WormholeSystem } from '@shared/types'
 import {
   exactSolarSystem,
   solarSystemById,
@@ -11,6 +11,8 @@ import {
 } from '@shared/data/exploration-static'
 import {
   buildChainRows,
+  createExplorationMap,
+  createReadableMapSummary,
   createSystem,
   formatShortDuration,
   getSiteRiskGuidance,
@@ -21,9 +23,11 @@ import {
   parseScannerResults,
   upsertScannerRows
 } from '../lib/exploration'
+import { createMapJson, createMapShareCode, decodeSharedMap, prepareImportedMap } from '@shared/exploration-share'
 import { genId } from '../lib/hooks'
 import { EmptyState, ErrorBox, Loader, Panel } from '../components/ui'
 import { Tooltip } from '../components/Tooltip'
+import { ExplorationGraph } from '../components/ExplorationGraph'
 
 const SIG_GROUPS: WormholeSignature['group'][] = [
   'wormhole',
@@ -42,6 +46,10 @@ const GROUP_CHIP: Record<WormholeSignature['group'], string> = {
   combat: 'red',
   unknown: ''
 }
+
+const WORMHOLE_TYPE_SUGGESTIONS = Array.from(
+  new Map(wormholeTypes.map((type) => [type.code, type])).values()
+)
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -200,10 +208,20 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
   const [liveContextError, setLiveContextError] = useState('')
   const [arrivalSignatureId, setArrivalSignatureId] = useState('')
   const [focusedSignatureId, setFocusedSignatureId] = useState('')
+  const [newMapName, setNewMapName] = useState('')
+  const [showNewMap, setShowNewMap] = useState(false)
+  const [showMapShare, setShowMapShare] = useState(false)
+  const [showMapImport, setShowMapImport] = useState(false)
+  const [mapImportText, setMapImportText] = useState('')
+  const [mapTransferMessage, setMapTransferMessage] = useState('')
+  const [mapTransferError, setMapTransferError] = useState('')
   const [now, setNow] = useState(Date.now())
   const saveQueue = useRef<Promise<unknown>>(Promise.resolve())
   const saveRevision = useRef(0)
   const latestState = useRef<ExplorationState | null>(null)
+  const mapFileInput = useRef<HTMLInputElement | null>(null)
+
+  const loadedActiveMap = state?.maps.find((map) => map.id === state.activeMapId) ?? state?.maps[0]
 
   useEffect(() => load(), [])
   useEffect(() => {
@@ -233,13 +251,13 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
     return () => window.clearInterval(timer)
   }, [])
   useEffect(() => {
-    const activeSystem = state?.systems.find((system) => system.id === state.activeSystemId) ?? state?.systems[0]
+    const activeSystem = loadedActiveMap?.systems.find((system) => system.id === loadedActiveMap.activeSystemId) ?? loadedActiveMap?.systems[0]
     const unlinked = activeSystem?.signatures.filter((signature) =>
       signature.group === 'wormhole' && !signature.closedAt && !signature.destinationSystemId
     ) ?? []
     if (unlinked.length === 1) setArrivalSignatureId(unlinked[0].id)
     else if (!unlinked.some((signature) => signature.id === arrivalSignatureId)) setArrivalSignatureId('')
-  }, [state, arrivalSignatureId])
+  }, [loadedActiveMap, arrivalSignatureId])
   useEffect(() => {
     if (!focusedSignatureId) return
     window.requestAnimationFrame(() => {
@@ -247,7 +265,7 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
       if (card instanceof HTMLDetailsElement) card.open = true
       card?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
-  }, [state?.activeSystemId, focusedSignatureId])
+  }, [loadedActiveMap?.activeSystemId, focusedSignatureId])
 
   function load(): void {
     setLoadError('')
@@ -256,7 +274,8 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
       .then((loaded) => {
         setState(loaded)
         latestState.current = loaded
-        setShowHelp(loaded.systems.length === 0 || !loaded.helpDismissed)
+        const firstMap = loaded.maps.find((map) => map.id === loaded.activeMapId) ?? loaded.maps[0]
+        setShowHelp(!firstMap || firstMap.systems.length === 0 || !loaded.helpDismissed)
       })
       .catch((error) => setLoadError(error instanceof Error ? error.message : String(error)))
   }
@@ -291,16 +310,18 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
   if (loadError) return <ErrorBox message={`Could not load the local chain: ${loadError}`} onRetry={load} />
   if (!state) return <Loader label="Loading chain…" />
   const currentState: ExplorationState = state
+  const currentMap = currentState.maps.find((map) => map.id === currentState.activeMapId) ?? currentState.maps[0]
+  if (!currentMap) return <ErrorBox message="No exploration map could be loaded." onRetry={load} />
 
-  const active = currentState.systems.find((system) => system.id === currentState.activeSystemId) ?? currentState.systems[0]
+  const active = currentMap.systems.find((system) => system.id === currentMap.activeSystemId) ?? currentMap.systems.find((system) => !system.archivedAt) ?? currentMap.systems[0]
   const activeSignatures = active?.signatures.filter((signature) => !signature.closedAt) ?? []
   const closedSignatures = active?.signatures.filter((signature) => signature.closedAt) ?? []
-  const chainRows = buildChainRows(currentState)
+  const chainRows = buildChainRows(currentMap)
   const parsedScan = parseScannerResults(scannerText)
   const liveReference = liveContext ? solarSystemById(liveContext.solarSystemId) : undefined
   const liveName = liveReference?.name ?? liveContext?.solarSystemName
   const trackedLiveSystem = liveContext
-    ? currentState.systems.find((system) =>
+    ? currentMap.systems.find((system) =>
       system.solarSystemId === liveContext.solarSystemId ||
       Boolean(liveName && system.name.toLowerCase() === liveName.toLowerCase())
     )
@@ -309,16 +330,28 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
     signature.group === 'wormhole' && !signature.destinationSystemId
   )
 
+  function persistMap(next: ExplorationMap): void {
+    persist({
+      ...currentState,
+      activeMapId: next.id,
+      maps: currentState.maps.map((map) => map.id === next.id ? { ...next, updatedAt: Date.now() } : map)
+    })
+  }
+
+  function updateMap(patch: Partial<ExplorationMap>): void {
+    persistMap({ ...currentMap, ...patch })
+  }
+
   function addSystem(event: FormEvent): void {
     event.preventDefault()
     const name = systemName.trim()
     if (!name) return
     const system = createTrackedSystem(name, genId(), systemClass)
-    persist({
-      ...currentState,
-      systems: [...currentState.systems, system],
+    persistMap({
+      ...currentMap,
+      systems: [...currentMap.systems, system],
       activeSystemId: system.id,
-      rootSystemId: currentState.rootSystemId ?? system.id
+      rootSystemId: currentMap.rootSystemId ?? system.id
     })
     setSystemName('')
     setSystemClass('')
@@ -328,11 +361,11 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
   function addOrOpenLiveSystem(linkSignatureId?: string): void {
     if (!liveContext || !liveName) return
     if (trackedLiveSystem) {
-      persist({ ...currentState, activeSystemId: trackedLiveSystem.id })
+      updateMap({ activeSystemId: trackedLiveSystem.id })
       return
     }
     const destination = createTrackedSystem(liveName, genId())
-    let systems = currentState.systems
+    let systems = currentMap.systems
     if (linkSignatureId && active) {
       systems = systems.map((system) => system.id === active.id
         ? {
@@ -344,30 +377,30 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
           }
         : system)
     }
-    persist({
-      ...currentState,
+    persistMap({
+      ...currentMap,
       systems: [...systems, destination],
       activeSystemId: destination.id,
-      rootSystemId: currentState.rootSystemId ?? destination.id
+      rootSystemId: currentMap.rootSystemId ?? destination.id
     })
   }
 
   function openSignature(systemId: string, signatureId: string): void {
     setFocusedSignatureId(signatureId)
-    persist({ ...currentState, activeSystemId: systemId })
+    updateMap({ activeSystemId: systemId })
   }
 
   function updateSystem(id: string, patch: Partial<WormholeSystem>): void {
-    persist({
-      ...currentState,
-      systems: currentState.systems.map((system) =>
+    persistMap({
+      ...currentMap,
+      systems: currentMap.systems.map((system) =>
         system.id === id ? { ...system, ...patch, updatedAt: Date.now() } : system
       )
     })
   }
 
   function removeSystem(id: string): void {
-    const systems = currentState.systems
+    const systems = currentMap.systems
       .filter((system) => system.id !== id)
       .map((system) => ({
         ...system,
@@ -377,11 +410,11 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
             : signature
         )
       }))
-    persist({
-      ...currentState,
+    persistMap({
+      ...currentMap,
       systems,
-      activeSystemId: currentState.activeSystemId === id ? systems[0]?.id : currentState.activeSystemId,
-      rootSystemId: currentState.rootSystemId === id ? systems[0]?.id : currentState.rootSystemId
+      activeSystemId: currentMap.activeSystemId === id ? systems[0]?.id : currentMap.activeSystemId,
+      rootSystemId: currentMap.rootSystemId === id ? systems[0]?.id : currentMap.rootSystemId
     })
     setPendingDeleteId(null)
   }
@@ -435,9 +468,9 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
   function importScanner(): void {
     if (!active || parsedScan.rows.length === 0) return
     const result = upsertScannerRows(active, parsedScan.rows, genId)
-    persist({
-      ...currentState,
-      systems: currentState.systems.map((system) => (system.id === active.id ? result.system : system))
+    persistMap({
+      ...currentMap,
+      systems: currentMap.systems.map((system) => (system.id === active.id ? result.system : system))
     })
     setImportMessage(`${result.added} added · ${result.updated} refreshed${parsedScan.skipped ? ` · ${parsedScan.skipped} skipped` : ''}`)
     setScannerText('')
@@ -456,9 +489,9 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
       ),
       updatedAt: Date.now()
     }
-    persist({
-      ...currentState,
-      systems: [...currentState.systems.map((system) => (system.id === active.id ? updatedActive : system)), destination],
+    persistMap({
+      ...currentMap,
+      systems: [...currentMap.systems.map((system) => (system.id === active.id ? updatedActive : system)), destination],
       activeSystemId: open ? destination.id : active.id
     })
     setCreatingDestinationFor(null)
@@ -472,22 +505,130 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
     if (!open && !currentState.helpDismissed) persist({ ...currentState, helpDismissed: true })
   }
 
-  function archiveSystem(system: WormholeSystem): void {
+  function restoreLegacySystem(system: WormholeSystem): void {
     const archivedAt = system.archivedAt ? undefined : Date.now()
-    const systems = currentState.systems.map((item) =>
+    const systems = currentMap.systems.map((item) =>
       item.id === system.id ? { ...item, archivedAt, updatedAt: Date.now() } : item
     )
     const nextActive = archivedAt
       ? systems.find((item) => !item.archivedAt && item.id !== system.id)?.id
       : system.id
-    persist({
-      ...currentState,
+    persistMap({
+      ...currentMap,
       systems,
       activeSystemId: nextActive ?? system.id,
-      rootSystemId: archivedAt && currentState.rootSystemId === system.id
+      rootSystemId: archivedAt && currentMap.rootSystemId === system.id
         ? systems.find((item) => !item.archivedAt)?.id
-        : currentState.rootSystemId
+        : currentMap.rootSystemId
     })
+  }
+
+  function createMap(event: FormEvent): void {
+    event.preventDefault()
+    const map = createExplorationMap(newMapName, genId())
+    persist({ ...currentState, maps: [...currentState.maps, map], activeMapId: map.id })
+    setNewMapName('')
+    setShowNewMap(false)
+  }
+
+  function duplicateMap(): void {
+    const timestamp = Date.now()
+    const copy: ExplorationMap = {
+      ...currentMap,
+      id: genId(),
+      name: `${currentMap.name} copy`,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      archivedAt: undefined,
+      systems: currentMap.systems.map((system) => ({
+        ...system,
+        signatures: system.signatures.map((signature) => ({ ...signature }))
+      })),
+      nodePositions: currentMap.nodePositions ? { ...currentMap.nodePositions } : undefined
+    }
+    persist({ ...currentState, maps: [...currentState.maps, copy], activeMapId: copy.id })
+    setMapTransferMessage('Map duplicated. Changes to this copy are independent.')
+  }
+
+  function archiveCurrentMap(): void {
+    const archived = { ...currentMap, archivedAt: Date.now(), updatedAt: Date.now() }
+    const remaining = currentState.maps.find((map) => map.id !== currentMap.id && !map.archivedAt)
+    if (remaining) {
+      persist({ ...currentState, maps: currentState.maps.map((map) => map.id === archived.id ? archived : map), activeMapId: remaining.id })
+      return
+    }
+    const replacement = createExplorationMap('New chain', genId())
+    persist({ ...currentState, maps: [...currentState.maps.map((map) => map.id === archived.id ? archived : map), replacement], activeMapId: replacement.id })
+  }
+
+  function restoreMap(mapId: string): void {
+    persist({
+      ...currentState,
+      maps: currentState.maps.map((map) => map.id === mapId ? { ...map, archivedAt: undefined, updatedAt: Date.now() } : map),
+      activeMapId: mapId
+    })
+  }
+
+  async function copyText(value: string, message: string): Promise<void> {
+    setMapTransferError('')
+    try {
+      await navigator.clipboard.writeText(value)
+      setMapTransferMessage(message)
+    } catch (error) {
+      setMapTransferError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function copyShareCode(): Promise<void> {
+    setMapTransferMessage('Creating share code…')
+    try {
+      const code = await createMapShareCode(currentMap)
+      const message = code.length > 1_900
+        ? `Share code copied (${code.length.toLocaleString()} characters). It may exceed a Discord message; export a map file instead.`
+        : 'Share code copied. Anyone with it can read this map.'
+      await copyText(code, message)
+    } catch (error) {
+      setMapTransferError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  function exportMapFile(): void {
+    const blob = new Blob([createMapJson(currentMap)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${currentMap.name.replace(/[^a-z0-9-_]+/gi, '-').replace(/^-|-$/g, '') || 'firstmate-map'}.firstmate-map.json`
+    link.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 0)
+    setMapTransferMessage('Map file exported.')
+  }
+
+  async function importMapText(value: string): Promise<void> {
+    setMapTransferError('')
+    try {
+      const imported = prepareImportedMap(await decodeSharedMap(value), genId())
+      persist({ ...currentState, maps: [...currentState.maps, imported], activeMapId: imported.id })
+      setMapImportText('')
+      setShowMapImport(false)
+      setMapTransferMessage(`Imported ${imported.name}.`)
+    } catch (error) {
+      setMapTransferError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function importMapFile(file?: File): Promise<void> {
+    if (!file) return
+    if (file.size > 5_000_000) {
+      setMapTransferError('That map file is larger than the 5 MB import limit.')
+      return
+    }
+    try {
+      await importMapText(await file.text())
+    } catch (error) {
+      setMapTransferError(error instanceof Error ? error.message : String(error))
+    } finally {
+      if (mapFileInput.current) mapFileInput.current.value = ''
+    }
   }
 
   return (
@@ -523,6 +664,100 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
           </div>
         }
       >
+        <div className="map-library-bar">
+          <div className="map-picker">
+            <label className="field-label" htmlFor="active-exploration-map">Map</label>
+            <select
+              id="active-exploration-map"
+              className="field"
+              value={currentMap.id}
+              onChange={(event) => persist({ ...currentState, activeMapId: event.target.value })}
+            >
+              {currentState.maps.filter((map) => !map.archivedAt).map((map) => (
+                <option key={map.id} value={map.id}>{map.name} · {map.systems.filter((system) => !system.archivedAt).length} systems</option>
+              ))}
+            </select>
+          </div>
+          <div className="map-library-actions">
+            <button className="btn sm" onClick={() => setShowNewMap((open) => !open)}>+ New map</button>
+            <button className="btn sm" onClick={duplicateMap}>Duplicate</button>
+            <button className="btn sm" onClick={() => setShowMapShare((open) => !open)}>Share</button>
+            <button className="btn sm" onClick={() => setShowMapImport((open) => !open)}>Import</button>
+            <button className="btn sm" onClick={archiveCurrentMap}>Archive map</button>
+          </div>
+        </div>
+
+        <div className="map-title-row">
+          <input
+            className="map-title-input"
+            aria-label="Map name"
+            value={currentMap.name}
+            onChange={(event) => updateMap({ name: event.target.value || 'Untitled chain' })}
+          />
+          <span className="hint">Autosaved locally · {currentMap.systems.filter((system) => !system.archivedAt).length} systems</span>
+        </div>
+
+        {showNewMap && (
+          <form className="map-transfer-panel" onSubmit={createMap}>
+            <strong>Start a separate map</strong>
+            <div className="map-transfer-row">
+              <input className="field" autoFocus placeholder="Saturday expedition" value={newMapName} onChange={(event) => setNewMapName(event.target.value)} />
+              <button className="btn primary sm" type="submit">Create &amp; open</button>
+              <button className="btn sm" type="button" onClick={() => setShowNewMap(false)}>Cancel</button>
+            </div>
+            <div className="hint">Your current map stays saved and can be reopened from the map picker.</div>
+          </form>
+        )}
+
+        {showMapShare && (
+          <div className="map-transfer-panel">
+            <strong>Share {currentMap.name}</strong>
+            <div className="map-transfer-actions">
+              <button className="btn primary sm" onClick={() => void copyShareCode()}>Copy share code</button>
+              <button className="btn sm" onClick={() => void copyText(createReadableMapSummary(currentMap), 'Readable map summary copied.')}>Copy readable summary</button>
+              <button className="btn sm" onClick={exportMapFile}>Export map file</button>
+            </div>
+            <div className="hint">Share codes are compressed for chat. Large maps are more reliable as files. Neither format includes ESI tokens, API keys, or your other maps.</div>
+            <div className="hint warning-text">Map exports are not encrypted. Anyone who receives one can read the chain.</div>
+          </div>
+        )}
+
+        {showMapImport && (
+          <div
+            className="map-transfer-panel map-drop-zone"
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              event.preventDefault()
+              void importMapFile(event.dataTransfer.files?.[0])
+            }}
+          >
+            <strong>Import a separate map</strong>
+            <textarea className="field map-import-text" autoFocus placeholder="Paste an FMAP1G: share code or FirstMate map JSON…" value={mapImportText} onChange={(event) => setMapImportText(event.target.value)} />
+            <div className="map-transfer-actions">
+              <button className="btn primary sm" disabled={!mapImportText.trim()} onClick={() => void importMapText(mapImportText)}>Import pasted map</button>
+              <button className="btn sm" onClick={() => mapFileInput.current?.click()}>Choose map file</button>
+              <button className="btn sm" onClick={() => setShowMapImport(false)}>Cancel</button>
+            </div>
+            <input ref={mapFileInput} className="visually-hidden" type="file" accept=".json,.firstmate-map.json,application/json" onChange={(event) => void importMapFile(event.target.files?.[0])} />
+            <div className="hint">You can also drop a FirstMate map JSON file anywhere in this panel.</div>
+          </div>
+        )}
+
+        {mapTransferMessage && <div className="map-transfer-message">{mapTransferMessage}</div>}
+        {mapTransferError && <ErrorBox message={mapTransferError} />}
+
+        {currentState.maps.some((map) => map.archivedAt) && (
+          <details className="archived-maps">
+            <summary>Archived maps ({currentState.maps.filter((map) => map.archivedAt).length})</summary>
+            {currentState.maps.filter((map) => map.archivedAt).map((map) => (
+              <div className="closed-row" key={map.id}>
+                <span><strong>{map.name}</strong> · {map.systems.length} systems</span>
+                <button className="btn sm" onClick={() => restoreMap(map.id)}>Restore &amp; open</button>
+              </div>
+            ))}
+          </details>
+        )}
+
         {showHelp && (
           <div className="explore-help">
             <strong>How Explore works</strong>
@@ -533,6 +768,7 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
               <li>After jumping, link the detected arrival system to the signature you used.</li>
               <li>Update Life and Mass as you observe them; close the connection when it disappears.</li>
               <li>Optionally turn on Site guidance for beginner PvE warnings after a scan is resolved.</li>
+              <li>Create separate maps for different expeditions; archive or share the whole map when finished.</li>
             </ol>
             <div className="hint">
               ESI can detect where you are. Signature results and wormhole connections still come from your observations, and the chain is saved only on this computer.
@@ -615,33 +851,44 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
 
         {saveError && <ErrorBox message={`Could not save the local chain: ${saveError}`} onRetry={retrySave} />}
 
-        {state.systems.length === 0 ? (
+        {currentMap.systems.filter((system) => !system.archivedAt).length === 0 ? (
           <EmptyState title="Start your chain">Add the system you are in, then import your scan results.</EmptyState>
         ) : (
-          <div className="chain-map" aria-label="Wormhole chain map">
-            <div className="chain-map-heading">Chain map</div>
-            {chainRows.map((row, index) => (
-              <div key={`${row.system.id}-${index}`} className="chain-row" style={{ '--chain-depth': row.depth } as CSSProperties}>
-                {row.via && (
-                  <div className="chain-edge">
-                    <span>↳ {row.via.sigId || 'Unscanned'}</span>
-                    {row.via.wormholeType && <span className="chip purple">{row.via.wormholeType}</span>}
-                    <span className={`chip ${lifeTone(row.via.life)}`}>{LIFE_LABELS[row.via.life ?? 'unknown']}</span>
-                    <span className={`chip ${massTone(row.via.mass)}`}>{MASS_LABELS[row.via.mass ?? 'unknown']}</span>
+          <>
+            <ExplorationGraph
+              map={currentMap}
+              activeSystemId={active?.id}
+              liveSystemId={liveContext?.solarSystemId}
+              onSelectSystem={(systemId) => updateMap({ activeSystemId: systemId })}
+              onSelectConnection={openSignature}
+            />
+            <details className="compact-chain-section">
+              <summary>Compact chain list</summary>
+              <div className="chain-map" aria-label="Compact wormhole chain list">
+                {chainRows.map((row, index) => (
+                  <div key={`${row.system.id}-${index}`} className="chain-row" style={{ '--chain-depth': row.depth } as CSSProperties}>
+                    {row.via && (
+                      <div className="chain-edge">
+                        <span>↳ {row.via.sigId || 'Unscanned'}</span>
+                        {row.via.wormholeType && <span className="chip purple">{row.via.wormholeType}</span>}
+                        <span className={`chip ${lifeTone(row.via.life)}`}>{LIFE_LABELS[row.via.life ?? 'unknown']}</span>
+                        <span className={`chip ${massTone(row.via.mass)}`}>{MASS_LABELS[row.via.mass ?? 'unknown']}</span>
+                      </div>
+                    )}
+                    <button className={`chain-system ${row.system.id === active?.id ? 'active' : ''}`} onClick={() => updateMap({ activeSystemId: row.system.id })}>
+                      <span><strong>{row.system.name}</strong>{row.system.systemClass ? ` · ${row.system.systemClass}` : ''}{row.system.effect ? ` · ${row.system.effect}` : ''}</span>
+                      <span className="faint">{row.cycle ? '↩ linked above' : `${row.system.signatures.filter((signature) => !signature.closedAt).length} sigs`}</span>
+                    </button>
+                    {!row.cycle && row.system.signatures.filter((signature) => signature.group === 'wormhole' && !signature.closedAt && !signature.destinationSystemId).map((signature) => (
+                      <button key={signature.id} className="chain-unlinked" onClick={() => openSignature(row.system.id, signature.id)}>
+                        ↳ {signature.sigId || 'Unscanned'} · Unlinked exit · Link this exit
+                      </button>
+                    ))}
                   </div>
-                )}
-                <button className={`chain-system ${row.system.id === active?.id ? 'active' : ''}`} onClick={() => persist({ ...state, activeSystemId: row.system.id })}>
-                  <span><strong>{row.system.name}</strong>{row.system.systemClass ? ` · ${row.system.systemClass}` : ''}{row.system.effect ? ` · ${row.system.effect}` : ''}</span>
-                  <span className="faint">{row.cycle ? '↩ linked above' : `${row.system.signatures.filter((signature) => !signature.closedAt).length} sigs`}</span>
-                </button>
-                {!row.cycle && row.system.signatures.filter((signature) => signature.group === 'wormhole' && !signature.closedAt && !signature.destinationSystemId).map((signature) => (
-                  <button key={signature.id} className="chain-unlinked" onClick={() => openSignature(row.system.id, signature.id)}>
-                    ↳ {signature.sigId || 'Unscanned'} · Unlinked exit · Link this exit
-                  </button>
                 ))}
               </div>
-            ))}
-          </div>
+            </details>
+          </>
         )}
       </Panel>
 
@@ -650,9 +897,8 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
           title={`System · ${active.name}`}
           actions={
             <div className="actions">
-              <button className="btn sm" onClick={() => persist({ ...state, rootSystemId: active.id })}>Set root</button>
+              <button className="btn sm" onClick={() => updateMap({ rootSystemId: active.id })}>Set root</button>
               <button className="btn sm" onClick={addSignature}>+ Signature</button>
-              <button className="btn sm" onClick={() => archiveSystem(active)}>Archive</button>
               <button className="btn sm danger" onClick={() => setPendingDeleteId(active.id)}>Delete…</button>
             </div>
           }
@@ -684,7 +930,7 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
           </div>
           {(active.solarSystemId || active.effect) && <div className="system-metadata hint">Matched to official EVE data{active.effect ? ` · ${active.effect} effect` : ''}.</div>}
           <datalist id="wormhole-type-codes">
-            {wormholeTypes.map((type) => <option key={type.code} value={type.code}>{type.destinationClass ? `Leads to ${type.destinationClass}` : 'Exit / special destination'}</option>)}
+            {WORMHOLE_TYPE_SUGGESTIONS.map((type) => <option key={type.code} value={type.code}>{type.destinationClass ? `Leads to ${type.destinationClass}` : 'Exit / special destination'}</option>)}
           </datalist>
 
           {activeSignatures.length === 0 ? (
@@ -722,12 +968,12 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
                           <label className="field-label">Destination</label>
                           <select className="field" value={signature.destinationSystemId ?? ''} onChange={(event) => updateSignature(signature.id, { destinationSystemId: event.target.value || undefined })}>
                             <option value="">Unknown / unlinked</option>
-                            {state.systems.filter((system) => system.id !== active.id && !system.archivedAt).map((system) => <option key={system.id} value={system.id}>{system.name}{system.systemClass ? ` · ${system.systemClass}` : ''}</option>)}
+                            {currentMap.systems.filter((system) => system.id !== active.id && !system.archivedAt).map((system) => <option key={system.id} value={system.id}>{system.name}{system.systemClass ? ` · ${system.systemClass}` : ''}</option>)}
                           </select>
                         </div>
                         <div className={`connection-status ${signature.destinationSystemId ? 'linked' : ''}`}>
                           {signature.destinationSystemId
-                            ? `Linked to ${state.systems.find((system) => system.id === signature.destinationSystemId)?.name ?? 'tracked system'}`
+                            ? `Linked to ${currentMap.systems.find((system) => system.id === signature.destinationSystemId)?.name ?? 'tracked system'}`
                             : 'Unlinked — the chain does not know where this exit leads yet.'}
                         </div>
 
@@ -785,10 +1031,10 @@ export function Exploration({ autoRefreshMs }: { autoRefreshMs?: number }): JSX.
             </details>
           )}
 
-          {state.systems.some((system) => system.archivedAt) && (
+          {currentMap.systems.some((system) => system.archivedAt) && (
             <details className="closed-section">
-              <summary>Archived systems ({state.systems.filter((system) => system.archivedAt).length})</summary>
-              {state.systems.filter((system) => system.archivedAt).map((system) => <div className="closed-row" key={system.id}><span>{system.name}{system.systemClass ? ` · ${system.systemClass}` : ''}</span><button className="btn sm" onClick={() => archiveSystem(system)}>Restore & open</button></div>)}
+              <summary>Hidden systems from older FirstMate versions ({currentMap.systems.filter((system) => system.archivedAt).length})</summary>
+              {currentMap.systems.filter((system) => system.archivedAt).map((system) => <div className="closed-row" key={system.id}><span>{system.name}{system.systemClass ? ` · ${system.systemClass}` : ''}</span><button className="btn sm" onClick={() => restoreLegacySystem(system)}>Restore &amp; open</button></div>)}
             </details>
           )}
         </Panel>

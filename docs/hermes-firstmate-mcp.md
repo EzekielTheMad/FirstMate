@@ -92,7 +92,7 @@ its id to `DISCORD_FREE_RESPONSE_CHANNELS`; otherwise mention the bot normally.
 | Economy | `get_wallet_activity`, `get_market_orders` |
 | Assets | `list_asset_locations`, `get_assets_at_location`, `search_assets`, `get_asset_cleanup_context`, `analyze_reprocessing_candidates`, `get_ships` |
 | Activity | `get_mining_history`, `get_industry_jobs`, `get_clones_and_implants` |
-| Exploration | `get_exploration_chain`, `get_exploration_system`, `get_wormhole_alerts` |
+| Exploration | `get_exploration_chain` (active or named map plus map index), `get_exploration_system` (map-aware lookup), `get_wormhole_alerts` (all active maps) |
 | Local knowledge | `get_combat_library`, `get_advisor_history` |
 
 All list/search tools are bounded so a large inventory does not flood a Discord conversation.

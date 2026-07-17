@@ -5,6 +5,61 @@ the solar system your character is currently in, but ESI does not expose scanned
 wormhole connections. FirstMate therefore asks you to confirm the exit you travelled through instead
 of guessing and corrupting the chain. No AI provider is required.
 
+## Maps, systems, and connections
+
+Explore stores a library of independent maps. Each map owns its systems, signatures, connections,
+root, selected system, notes, and timestamps. Use the map picker to return to an earlier expedition
+without mixing it into the chain you are currently scanning.
+
+- **+ New map** starts a clean expedition while keeping the current map autosaved.
+- **Duplicate** creates an independent copy that can be edited without changing the original.
+- **Archive map** removes the entire expedition from the active picker. It remains locally
+  restorable; individual-system archive from older releases is no longer the main workflow.
+- Renaming a map is immediate and autosaved.
+
+Existing single-chain data from FirstMate 0.1.18 and earlier migrates into a map named **Current
+chain**. Systems, signatures, links, notes, Life/Mass observations, and timestamps are preserved.
+
+## Visual chain map
+
+The primary map is an interactive node-and-connection graph:
+
+- drag empty space to pan and use the mouse wheel or controls to zoom;
+- select a system node to open its scanner results and notes;
+- select a connection label to open the originating wormhole signature;
+- the current ESI location has a green outline, the selected system uses the accent outline, and
+  red counters identify urgent wormhole observations;
+- nodes show system security/class/effect and signature counts; connection details show signature,
+  type, Life, and Mass where known.
+
+The **Compact chain list** remains available beneath the graph for keyboard-friendly navigation and
+very narrow windows. FirstMate lays out branches automatically; it does not attempt to reproduce a
+canonical physical position for wormhole systems.
+
+## Sharing and importing maps
+
+Choose **Share** on the active map for three formats:
+
+- **Copy share code** creates a compressed `FMAP1G:` string suitable for chat and pasting into
+  another FirstMate installation. If it grows beyond a typical Discord message, FirstMate warns
+  that a file will be more reliable.
+- **Copy readable summary** creates a plain-text tree for Discord or notes. It is for people to
+  read, not a lossless import.
+- **Export map file** downloads a formatted `.firstmate-map.json` backup for large maps or archives.
+
+Choose **Import** to paste either a share code or map JSON, select a JSON file, or drop a map file
+onto the import panel. Imports always create a separate local map and never overwrite an existing
+one. The importer validates format version, record types, signature groups, and conservative size
+limits before accepting data.
+
+Exports contain only the selected map. They do not include ESI tokens, API/provider keys, character
+credentials, settings, Advisor history, or other maps. They are not encrypted: anyone who receives
+the code or file can read the chain.
+
+Sharing is snapshot-based. Importing a map does not create a live link back to the sender, merge
+later edits, or grant corp access. Real-time multi-user editing would require a separately secured
+hosted service and is intentionally outside FirstMate's local-first map scope.
+
 ## Recommended workflow
 
 1. Use the **Live ESI location** card to open or add the system you are in. You can also choose
@@ -100,8 +155,8 @@ the next FirstMate release. Maintainers can also run the workflow manually after
 
 ## Local data and upgrades
 
-Explore data is stored in FirstMate's local application-data directory. Upgrading from 0.1.14 or
-earlier preserves systems, signatures, notes, and EOL timestamps. The old combined status is split
+Explore data is stored in FirstMate's local application-data directory. Upgrading from earlier
+versions preserves systems, signatures, notes, links, and EOL timestamps. The old combined status is split
 conservatively: FirstMate does not invent a Life or Mass observation that the previous format could
 not represent.
 

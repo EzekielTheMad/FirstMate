@@ -1,4 +1,4 @@
-import type { ExplorationState, WormholeSignature, WormholeSystem } from './types'
+import type { ExplorationMap, ExplorationState, WormholeSignature, WormholeSystem } from './types'
 
 export const LIFE_OPTIONS: NonNullable<WormholeSignature['life']>[] = [
   'unknown',
@@ -37,6 +37,16 @@ export function createSystem(name: string, id: string, now = Date.now()): Wormho
     id,
     name: name.trim(),
     signatures: [],
+    createdAt: now,
+    updatedAt: now
+  }
+}
+
+export function createExplorationMap(name: string, id: string, now = Date.now()): ExplorationMap {
+  return {
+    id,
+    name: name.trim() || 'Untitled chain',
+    systems: [],
     createdAt: now,
     updatedAt: now
   }
@@ -82,11 +92,9 @@ function normalizeSignature(signature: WormholeSignature): WormholeSignature {
   }
 }
 
-/** Deterministic, idempotent upgrade of the unversioned v1 local chain. */
-export function normalizeExplorationState(input: unknown): ExplorationState {
-  const raw = input && typeof input === 'object' ? (input as Partial<ExplorationState>) : {}
-  const systems = Array.isArray(raw.systems)
-    ? raw.systems.map((system) => ({
+function normalizeMap(input: Partial<ExplorationMap>, index: number): ExplorationMap {
+  const systems = Array.isArray(input.systems)
+    ? input.systems.map((system) => ({
         ...system,
         signatures: Array.isArray(system.signatures)
           ? system.signatures.map(normalizeSignature)
@@ -94,18 +102,53 @@ export function normalizeExplorationState(input: unknown): ExplorationState {
       }))
     : []
   const ids = new Set(systems.map((system) => system.id))
-  const activeSystemId = raw.activeSystemId && ids.has(raw.activeSystemId)
-    ? raw.activeSystemId
-    : systems[0]?.id
-  const rootSystemId = raw.rootSystemId && ids.has(raw.rootSystemId)
-    ? raw.rootSystemId
-    : systems[0]?.id
+  const activeSystemId = input.activeSystemId && ids.has(input.activeSystemId)
+    ? input.activeSystemId
+    : systems.find((system) => !system.archivedAt)?.id ?? systems[0]?.id
+  const rootSystemId = input.rootSystemId && ids.has(input.rootSystemId)
+    ? input.rootSystemId
+    : systems.find((system) => !system.archivedAt)?.id ?? systems[0]?.id
+  const createdAt = input.createdAt ?? systems.reduce((oldest, system) => Math.min(oldest, system.createdAt), Number.POSITIVE_INFINITY)
+  const updatedAt = input.updatedAt ?? systems.reduce((newest, system) => Math.max(newest, system.updatedAt), 0)
 
   return {
-    schemaVersion: 2,
+    id: input.id?.trim() || `map-${index + 1}`,
+    name: input.name?.trim() || (index === 0 ? 'Current chain' : `Chain ${index + 1}`),
     systems,
     activeSystemId,
     rootSystemId,
+    notes: input.notes,
+    createdAt: Number.isFinite(createdAt) ? createdAt : 0,
+    updatedAt,
+    archivedAt: input.archivedAt,
+    nodePositions: input.nodePositions
+  }
+}
+
+/** Deterministic, idempotent upgrade of the v1/v2 single-chain store. */
+export function normalizeExplorationState(input: unknown): ExplorationState {
+  const raw = input && typeof input === 'object'
+    ? (input as Partial<ExplorationState> & Partial<ExplorationMap>)
+    : {}
+  const sourceMaps = Array.isArray(raw.maps) && raw.maps.length > 0
+    ? raw.maps
+    : [{
+        id: 'map-1',
+        name: 'Current chain',
+        systems: Array.isArray(raw.systems) ? raw.systems : [],
+        activeSystemId: raw.activeSystemId,
+        rootSystemId: raw.rootSystemId
+      }]
+  const maps = sourceMaps.map(normalizeMap)
+  const mapIds = new Set(maps.map((map) => map.id))
+  const activeMapId = raw.activeMapId && mapIds.has(raw.activeMapId)
+    ? raw.activeMapId
+    : maps.find((map) => !map.archivedAt)?.id ?? maps[0]?.id
+
+  return {
+    schemaVersion: 3,
+    maps,
+    activeMapId,
     helpDismissed: raw.helpDismissed ?? false,
     showSiteGuidance: raw.showSiteGuidance ?? false
   }
@@ -301,8 +344,8 @@ export interface ChainRow {
 }
 
 /** Produces a narrow-window-friendly traversal and safely marks cycles. */
-export function buildChainRows(state: ExplorationState): ChainRow[] {
-  const systems = state.systems.filter((system) => !system.archivedAt)
+export function buildChainRows(map: ExplorationMap): ChainRow[] {
+  const systems = map.systems.filter((system) => !system.archivedAt)
   const byId = new Map(systems.map((system) => [system.id, system]))
   const adjacency = new Map<string, { destination: WormholeSystem; via: WormholeSignature; edgeId: string }[]>()
   const visited = new Set<string>()
@@ -334,10 +377,24 @@ export function buildChainRows(state: ExplorationState): ChainRow[] {
     }
   }
 
-  const root = byId.get(state.rootSystemId ?? '') ?? systems[0]
+  const root = byId.get(map.rootSystemId ?? '') ?? systems[0]
   if (root) visit(root, 0)
   for (const system of systems) if (!visited.has(system.id)) visit(system, 0)
   return rows
+}
+
+export function createReadableMapSummary(map: ExplorationMap): string {
+  const rows = buildChainRows(map)
+  const lines = [`FirstMate map: ${map.name}`]
+  for (const row of rows) {
+    const prefix = row.depth === 0 ? '' : `${'  '.repeat(Math.max(0, row.depth - 1))}↳ `
+    const details = [row.system.systemClass, row.system.effect].filter(Boolean).join(' · ')
+    const via = row.via
+      ? [row.via.sigId || 'Unscanned', row.via.wormholeType, LIFE_LABELS[row.via.life ?? 'unknown'], MASS_LABELS[row.via.mass ?? 'unknown']].filter(Boolean).join(' · ')
+      : ''
+    lines.push(`${prefix}${row.system.name}${details ? ` (${details})` : ''}${via ? ` — ${via}` : ''}${row.cycle ? ' ↩' : ''}`)
+  }
+  return lines.join('\n')
 }
 
 export function formatShortDuration(ms: number): string {
