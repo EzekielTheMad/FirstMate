@@ -22,6 +22,7 @@ import {
 import { login, logout, getAuthState, onAuthChange } from './auth/sso'
 import {
   fetchDashboard,
+  fetchExplorationContext,
   fetchEconomy,
   fetchMining,
   fetchAssets,
@@ -73,6 +74,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   // ESI
   ipcMain.handle('esi:dashboard', () => fetchDashboard())
+  ipcMain.handle('esi:explorationContext', () => fetchExplorationContext())
   ipcMain.handle('esi:economy', () => fetchEconomy())
   ipcMain.handle('esi:mining', () => fetchMining())
   ipcMain.handle('esi:assets', () => fetchAssets())

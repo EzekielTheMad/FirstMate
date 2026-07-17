@@ -1,13 +1,17 @@
 # Explore and wormhole chain tracking
 
-Explore is a local mapping tool for wormhole travel and expiration decisions. EVE's ESI API does
-not expose scanned signatures or wormhole connections, so FirstMate records only what you enter or
-paste. No AI provider is required.
+Explore is a local mapping tool for wormhole travel and expiration decisions. It uses ESI to notice
+the solar system your character is currently in, but ESI does not expose scanned signatures or
+wormhole connections. FirstMate therefore asks you to confirm the exit you travelled through instead
+of guessing and corrupting the chain. No AI provider is required.
 
 ## Recommended workflow
 
-1. Add the system you are in with its class (`C1`–`C6`, `HS`, `LS`, `NS`, or your own shorthand).
-2. Select signature rows in EVE's Probe Scanner, copy them, then use **Import scan**. FirstMate
+1. Use the **Live ESI location** card to open or add the system you are in. You can also choose
+   **+ System** and start typing a name or J-code. FirstMate suggests official EVE systems and
+   fills the known class and system effect from its bundled EVE static data.
+2. In EVE's Probe Scanner, click the results list, press **Ctrl+A**, then **Ctrl+C**. In FirstMate,
+   choose **Import scan**, click the paste box, press **Ctrl+V**, and import. FirstMate
    accepts tab-separated scanner rows such as:
 
    ```text
@@ -16,13 +20,16 @@ paste. No AI provider is required.
 
    Re-importing reconciles by signature ID. It refreshes resolved group/name fields while
    preserving notes, links, Life, Mass, and observation times. Missing rows are not auto-deleted.
-3. Expand a wormhole signature. Add the observed wormhole type (`K162`, `H296`, and so on), then
-   link an existing destination or create one. **Create & open** adds the system, links the hole,
-   and opens the new system so you can continue mapping.
-4. Use the chain map to move between systems. **Set root** changes the top of the view; connections
+3. Expand a wormhole signature. Start typing the observed wormhole type (`K162`, `H296`, and so on).
+   FirstMate suggests known types and displays the destination class plus nominal lifetime and mass
+   limits when the entrance code provides them. These are reference limits, not live observations.
+4. After jumping, the **Live ESI location** card notices the new system. Select the signature you
+   travelled through and choose **Link arrival & open**. You can still link an existing destination
+   or use **Create & open** manually. FirstMate never silently guesses the connection.
+5. Use the chain map to move between systems. **Set root** changes the top of the view; connections
    remain navigable from either side. Cycles are marked as linked above, and disconnected systems
    remain visible as separate roots.
-5. Close a connection when it disappears. Closing removes it from the active chain while keeping
+6. Close a connection when it disappears. Closing removes it from the active chain while keeping
    a restorable local record. Archive systems you no longer want in the active map. Permanent
    delete is a separate, confirmed action.
 
@@ -56,6 +63,17 @@ and [wormhole support article](https://support.eveonline.com/hc/en-us/articles/2
 K162 is the generic exit-side designation. A named entrance code can reveal more about a
 connection. FirstMate stores the code you observed; it does not fabricate a reverse-side signature.
 
+## What can be automatic
+
+- **Automatic:** current character system from ESI; system-name suggestions; security-space or
+  wormhole class; system effect; known wormhole-code suggestions and static type limits.
+- **Player-confirmed:** Probe Scanner rows, which signature was traversed, the code observed in Show
+  Info, Life, remaining Mass, and whether a connection has closed.
+
+The bundled lookup data is generated from CCP's official Static Data Export. Static wormhole
+connections are intentionally absent from that export, so FirstMate cannot safely infer a live chain
+from account access alone.
+
 ## Local data and upgrades
 
 Explore data is stored in FirstMate's local application-data directory. Upgrading from 0.1.14 or
@@ -65,4 +83,3 @@ not represent.
 
 If a save fails, the Explore toolbar changes to **Save failed** and offers Retry. **Saving…** means
 the latest edit is still queued; **Saved HH:MM** confirms the newest state reached local storage.
-

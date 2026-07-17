@@ -18,7 +18,7 @@ secondary monitor.
 | Tab | What it does | Data source |
 | --- | --- | --- |
 | **Dashboard** | Wallet, online status, skill points & queue, current system/region/security, active ship | Live ESI |
-| **Explore** | Local visual wormhole chain, Probe Scanner import, linked systems, independent life/mass observations, and connection history | Local (ESI does not expose WH connections) |
+| **Explore** | Live-system detection, EVE system/class autocomplete, Probe Scanner import, guided wormhole linking, type limits, independent life/mass observations, and connection history | ESI + local observations |
 | **Economy** | Wallet balance, buy/sell escrow, open market orders, wallet journal | Live ESI |
 | **Mining** | Mining ledger grouped by ore/type with average-market-price value estimates | Live ESI |
 | **Combat** | Local fittings library (EFT/pyfa paste) and tactical notes | Local |
@@ -83,18 +83,21 @@ security guidance, connection tests, data-sharing details, and troubleshooting, 
 
 ### Track a wormhole chain
 
-1. Open **Explore** and add the system you are currently in.
-2. In EVE's Probe Scanner, select and copy signature rows. Choose **Import scan** in FirstMate and
-   paste them; re-importing refreshes scanner fields without erasing notes or wormhole status.
-3. Expand a wormhole signature, enter its type, then link an existing system or choose
-   **Create destination system**. Linked systems immediately appear in the narrow chain map.
+1. Open **Explore** and use the live ESI location card, or start typing a system name/J-code under
+   **+ System**. FirstMate suggests official systems and fills known class/effect data.
+2. In EVE's Probe Scanner, click the results list, press **Ctrl+A** then **Ctrl+C**. Choose
+   **Import scan** in FirstMate, click the paste box, and press **Ctrl+V**. Re-importing refreshes
+   scanner fields without erasing notes, links, or wormhole status.
+3. Expand a wormhole signature and type its observed code. Known codes show destination class and
+   nominal limits. After jumping, select that signature in the live-location card and choose
+   **Link arrival & open**; FirstMate never guesses which exit you used.
 4. Record **Life** and **Mass** independently. **Mark <4h now** timestamps the observation in EVE
    time; it does not claim a guaranteed collapse deadline.
 5. **Close connection** when a hole disappears. Closed connections and archived systems remain
    recoverable instead of being silently deleted.
 
 See **[Explore and wormhole chain tracking](docs/exploration-chain.md)** for field meanings,
-scanner-paste examples, migration behavior, and recovery tips.
+scanner-paste examples, automatic versus player-confirmed data, migration behavior, and recovery tips.
 
 > FirstMate's in-app Advisor requests are independent. For a persistent conversation, enable
 > **Settings → Hermes data access (MCP)** and connect that read-only tool server to Hermes. Discord

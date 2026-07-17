@@ -332,8 +332,12 @@ export interface WormholeSystem {
   id: string
   /** Solar system name or J-code, entered by the player. */
   name: string
+  /** Canonical EVE solar-system id when matched to official data. */
+  solarSystemId?: number
   /** e.g. "C3", "HS", "LS", "NS". */
   systemClass?: string
+  /** Wormhole environmental effect from the official SDE, when present. */
+  effect?: string
   signatures: WormholeSignature[]
   notes?: string
   createdAt: number
@@ -347,6 +351,13 @@ export interface ExplorationState {
   activeSystemId?: string
   rootSystemId?: string
   helpDismissed?: boolean
+}
+
+export interface ExplorationContext {
+  solarSystemId: number
+  solarSystemName?: string
+  security?: number
+  observedAt: number
 }
 
 export interface CombatSnapshot {
@@ -455,6 +466,7 @@ export interface FirstMateApi {
   }
   esi: {
     dashboard: () => Promise<EsiResult<DashboardData>>
+    explorationContext: () => Promise<EsiResult<ExplorationContext>>
     economy: () => Promise<EsiResult<EconomyData>>
     mining: () => Promise<EsiResult<MiningData>>
     assets: () => Promise<EsiResult<AssetsData>>

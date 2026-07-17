@@ -212,7 +212,7 @@ function TabContent({
     case 'dashboard':
       return <Dashboard autoRefreshMs={autoRefreshMs} />
     case 'exploration':
-      return <Exploration />
+      return <Exploration autoRefreshMs={autoRefreshMs} />
     case 'economy':
       return <Economy autoRefreshMs={autoRefreshMs} />
     case 'assets':

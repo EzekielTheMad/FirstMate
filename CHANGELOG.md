@@ -3,6 +3,26 @@
 All notable changes to FirstMate are documented here. This file is the source
 of the release notes shown in the app's updater.
 
+## [0.1.17] - 2026-07-17
+
+### Added
+- Explore now detects the signed-in character's current solar system through
+  ESI and offers an explicit **Link arrival & open** workflow after a jump.
+- System and J-code fields autocomplete from a compact official EVE static-data
+  index, including known security-space/wormhole class and system effects.
+- Wormhole codes autocomplete and show known destination class, nominal life,
+  total mass, and maximum jump mass. K162 is clearly treated as an exit code.
+- Scanner import now includes exact Ctrl+A/Ctrl+C/Ctrl+V instructions in the
+  help panel, button tooltip, and import panel.
+
+### Changed
+- Wormhole editing is organized into identify, link, and condition steps, with
+  clearer linked/unlinked status in both cards and the chain map.
+- Signature cards start collapsed to keep busy systems readable and open when
+  selected from the map or created manually.
+- FirstMate never guesses a traversed wormhole: live location is automatic, but
+  the player confirms which signature should be linked.
+
 ## [0.1.16] - 2026-07-16
 
 ### Added

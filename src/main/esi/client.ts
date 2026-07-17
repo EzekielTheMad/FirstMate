@@ -5,6 +5,7 @@ import {
   DashboardData,
   EconomyData,
   EsiResult,
+  ExplorationContext,
   FittedItem,
   ImplantInfo,
   IndustryData,
@@ -880,6 +881,27 @@ async function getInventory(cid: number): Promise<InventorySnapshot> {
   } finally {
     if (inventoryInFlight?.promise === promise) inventoryInFlight = null
   }
+}
+
+/** Lightweight location-only query used while Explore is open. */
+export function fetchExplorationContext(): Promise<EsiResult<ExplorationContext>> {
+  return wrap(async () => {
+    const identity = getIdentity()
+    if (!identity) throw new Error('Not logged in.')
+    const location = await esi<{ solar_system_id: number }>(
+      `/characters/${identity.characterId}/location/`,
+      { auth: true }
+    )
+    const system = await esi<{ name: string; security_status: number }>(
+      `/universe/systems/${location.solar_system_id}/`
+    ).catch(() => null)
+    return {
+      solarSystemId: location.solar_system_id,
+      solarSystemName: system?.name,
+      security: system?.security_status,
+      observedAt: Date.now()
+    }
+  })
 }
 
 /** Unified cached inventory for integrations that need gear, materials, and ships together. */
