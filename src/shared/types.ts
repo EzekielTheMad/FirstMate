@@ -94,6 +94,8 @@ export interface PublicSettings {
   hasMcpKey: boolean
   /** True when the selected provider has enough configuration to be used. */
   advisorReady: boolean
+  /** Actionable status only; never includes a secret or ciphertext. */
+  secretStorageWarning?: string
 }
 
 export interface CharacterIdentity {

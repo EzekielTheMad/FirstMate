@@ -58,12 +58,14 @@ export function Settings({
   const [baseUrl, setBaseUrl] = useState(settings.advisorBaseUrl)
   const [sessionKey, setSessionKey] = useState(settings.advisorSessionKey)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [testing, setTesting] = useState(false)
   const [connection, setConnection] = useState<AdvisorConnectionResult | null>(null)
   const [mcpEnabled, setMcpEnabled] = useState(settings.mcpEnabled)
   const [mcpAllowLan, setMcpAllowLan] = useState(settings.mcpAllowLan)
   const [mcpPort, setMcpPort] = useState(String(settings.mcpPort))
   const [mcpKey, setMcpKey] = useState('')
+  const [savedMcpKey, setSavedMcpKey] = useState('')
   const [mcpHomeLocationId, setMcpHomeLocationId] = useState(settings.mcpHomeLocationId)
   const [mcpStatus, setMcpStatus] = useState<McpServerStatus | null>(null)
   const [assetLocations, setAssetLocations] = useState<McpAssetLocation[]>([])
@@ -114,11 +116,14 @@ export function Settings({
       if (provider === 'hermes') patch.hermesApiKey = apiKey.trim()
       if (provider === 'compatible') patch.compatibleApiKey = apiKey.trim()
     }
-    if (mcpKey.trim()) patch.mcpApiKey = mcpKey.trim()
+    if (mcpKey.trim() && mcpKey.trim() !== savedMcpKey) patch.mcpApiKey = mcpKey.trim()
     const next = await window.firstmate.settings.update(patch)
     onSaved(next)
     setScheme(next.callbackScheme)
     setApiKey('')
+    // Retain the generated value for Copy .env, but do not resubmit it on
+    // unrelated saves. A newer edit made while saving remains dirty.
+    if (typeof patch.mcpApiKey === 'string') setSavedMcpKey(patch.mcpApiKey)
     if (showSaved) {
       setSaved(true)
       setTimeout(() => setSaved(false), 1800)
@@ -127,8 +132,14 @@ export function Settings({
   }
 
   async function save(): Promise<void> {
-    await persist()
-    setMcpStatus(await window.firstmate.mcp.getStatus())
+    setSaved(false)
+    setSaveError('')
+    try {
+      await persist()
+      setMcpStatus(await window.firstmate.mcp.getStatus())
+    } catch (error) {
+      setSaveError((error as Error).message || 'Settings could not be saved.')
+    }
   }
 
   function changeProvider(next: AdvisorProvider): void {
@@ -376,7 +387,8 @@ export function Settings({
 
         <div className="hint" style={{ marginTop: 10 }}>
           AI is optional. FirstMate never switches providers or falls back to a paid API unless you
-          configure it. Access keys are encrypted with the OS keystore when available.
+          configure it. Saving access keys requires an available OS-backed keystore.
+          FirstMate never falls back to Base64 or plaintext storage.
         </div>
       </Panel>
 
@@ -451,6 +463,7 @@ export function Settings({
         <div className="hint">Endpoint: <code>{mcpEndpoint}</code> · All exposed tools are read-only.</div>
       </Panel>
 
+      {saveError && <div className="error-box" role="alert">{saveError}</div>}
       <div className="actions">
         <button className="btn primary" onClick={save}>
           {saved ? 'Saved ✓' : 'Save settings'}
