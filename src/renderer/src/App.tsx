@@ -157,6 +157,9 @@ export function App(): JSX.Element {
         <Nav tabs={TABS} active={tab} onSelect={setTab} />
 
         <div className="content">
+          {settings?.secretStorageWarning && (
+            <div className="warn-box" role="status">{settings.secretStorageWarning}</div>
+          )}
           <TabContent
             tab={active}
             auth={auth}

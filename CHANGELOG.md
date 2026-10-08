@@ -3,6 +3,26 @@
 All notable changes to FirstMate are documented here. This file is the source
 of the release notes shown in the app's updater.
 
+## [Unreleased]
+
+### Security
+- New provider/MCP keys and EVE refresh tokens require OS-backed encryption; the
+  reversible Base64 fallback and Linux `basic_text` backend are rejected.
+- Legacy credential records migrate only after successful encryption/read-back.
+  Locked keychains, malformed records and interrupted writes preserve originals;
+  unrelated settings edits no longer overwrite unreadable credentials.
+- Session restoration failures no longer silently delete saved refresh tokens.
+- Added pinned, redacted Gitleaks history checks and release validation gates.
+  Existing installers remain unsigned; signing is still outstanding work.
+
+### Maintenance
+- EVE data automation validates and reuses a reserved update branch, then exposes
+  a manual review/PR comparison instead of requesting blocked PR-write access.
+- Manual release runs build artifacts without publishing. Tagged releases validate
+  version/changelog and assets before publishing, with checksum manifests.
+- Documented the portfolio case study, AI-assisted authorship, credential recovery,
+  installation trust boundaries and outstanding acceptance checks.
+
 ## [0.1.19] - 2026-07-17
 
 ### Added

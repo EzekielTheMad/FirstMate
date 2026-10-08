@@ -1,6 +1,6 @@
 # FirstMate
 
-An unofficial **EVE Online companion desktop app** for Windows (also runs on macOS/Linux).
+An unofficial **EVE Online companion desktop app** for Windows. macOS/Linux source builds are experimental and are not covered by the Windows release workflow.
 Log in with your character via EVE SSO and get purpose-built, tabbed interfaces for the
 different parts of the game — exploration & wormhole tracking, economy, mining, combat — plus
 an **AI Advisor** that turns a stated goal into a concrete plan (skills to train, activities to
@@ -8,6 +8,34 @@ run, ships to work toward) grounded in your live character data.
 
 The window is sized tall and narrow by default, made to sit on the lower half of a portrait
 secondary monitor.
+
+## Portfolio case study
+
+**Problem:** An EVE session spans live character data, market and mining information, manually
+observed wormhole connections, fittings, and planning notes. FirstMate brings those tasks into a
+compact, local-first desktop companion.
+
+**Approach:** Electron separates OS integration and credential handling from a typed React UI.
+Read-only ESI calls supply character context; local JSON stores hold exploration maps, fittings,
+and notes. Players confirm wormhole connections because ESI does not expose them. Shareable maps
+are validated snapshots, with independent imports rather than implicit synchronization.
+
+**AI integration:** The optional Advisor sends a goal and a selected character-context summary to
+Hermes, Anthropic, OpenAI, or a compatible endpoint. A separate authenticated, read-only MCP bridge
+can expose FirstMate data to a configured agent. These are implemented runtime features. AI is off
+by default, and model advice is not authoritative game data or a promise of profit/safety.
+
+**Authorship and evidence:** FirstMate is an AI-assisted development project maintained by Victor
+([EzekielTheMad](https://github.com/EzekielTheMad)). The repository demonstrates integration,
+local-state workflows, automated tests, and Windows packaging. AI assistance is part of the
+implementation process; this case study makes no claim of sole manual authorship, adoption,
+revenue, or measured time savings. See [source](src), [changelog](CHANGELOG.md), and
+[release hygiene](docs/RELEASE_SECURITY.md) for inspectable implementation and validation boundaries.
+
+**Current result:** Windows installer releases exist through v0.1.19. The hardening changes in
+this source tree do not change those already-published installers; they need review and a new
+release. Live EVE sign-in, real OS keychains, provider accounts, and packaged installer behavior
+still require environment-specific acceptance testing.
 
 > Not affiliated with CCP Games. All ESI (EVE) access is **read-only**.
 
@@ -29,8 +57,12 @@ secondary monitor.
 Authentication uses the **OAuth 2.0 PKCE** flow — no client secret required. The SSO redirect
 comes back through a **custom URL scheme** (`eveauth-firstmate://callback`) that the app registers
 as an OS protocol handler, so no local web server or open port is needed. Your refresh token and
-AI provider keys are stored locally and encrypted at rest with the OS keystore (Electron
-`safeStorage`) when available.
+AI provider keys require an available OS-backed keystore (Electron `safeStorage`). New credentials
+are never saved using reversible Base64 or Electron's insecure Linux `basic_text` backend. Existing
+legacy records migrate only after encryption and read-back verification succeed. If the keychain
+is unavailable, the app preserves those records and blocks their use/new secret saves instead of
+silently weakening protection. [Credential storage and recovery](docs/credential-storage.md)
+explains migration, backups, and the limits of local encryption.
 
 > **Custom-scheme handlers work best from a packaged/installed build.** In `npm run dev` on
 > Windows the app registers the electron binary + entry script as the handler, which usually works;
@@ -41,18 +73,22 @@ AI provider keys are stored locally and encrypted at rest with the OS keystore (
 
 ## Download & install (Windows)
 
-Grab the latest **`FirstMate-<version>-setup.exe`** from the
-[**Releases page**](https://github.com/EzekielTheMad/FirstMate/releases), run it, and follow the
-installer (it adds Start-menu and desktop shortcuts). Then launch FirstMate and click
-**Log in with EVE** — no account setup needed.
+Windows builds are available as **`FirstMate-<version>-setup.exe`** on the
+[Releases page](https://github.com/EzekielTheMad/FirstMate/releases).
 
-> The installer is not code-signed, so Windows SmartScreen may show a "Windows protected your PC"
-> prompt on first run — click **More info → Run anyway**. (Code signing requires a paid
-> certificate; it can be added later.)
+**Current installers are unsigned.** Windows cannot verify a publisher signature, and SmartScreen
+may block or warn about them. Do not disable Windows protection or treat a warning as proof that a
+file is safe. Check the repository, exact release and source before deciding whether to install;
+if you cannot establish trust, stop and wait for a signed release. Building from reviewed source
+is an alternative for developers, not a substitute for reviewing dependencies.
+
+Signing remains outstanding distribution work. The CI changes here do not sign installers or
+retroactively secure earlier releases. An installed build adds Start-menu/desktop shortcuts and
+uses **Log in with EVE** to connect your character.
 
 ## Prerequisites (running from source)
 
-- **Node.js 20+**
+- **Node.js 22** (matches CI)
 - (Optional) a **Hermes Agent**, provider API key, or OpenAI-compatible model endpoint for the AI Advisor
 - The app ships with a built-in EVE Client ID, so no EVE developer account is required
 
@@ -108,8 +144,10 @@ credentials or other maps, but are not encrypted.
 
 For beginner help, turn on **Site guidance** in the Explore toolbar. It flags recognized dangerous
 mechanics and lower-PvE-risk hacking sites without ever claiming that a site is safe from players.
-The bundled offline EVE lookup is checked weekly against CCP's current Static Data Export; reviewed
-updates are included in subsequent FirstMate releases.
+The scheduled workflow checks the bundled lookup against CCP's Static Data Export and validates
+updates before publishing an automation branch. Its run summary links the comparison for a
+maintainer to open/review a PR; it does not create PRs or merge automatically. Reviewed updates
+reach users only in a subsequent release. See [release hygiene](docs/RELEASE_SECURITY.md).
 
 See **[Explore and wormhole chain tracking](docs/exploration-chain.md)** for field meanings,
 scanner-paste examples, automatic versus player-confirmed data, migration behavior, and recovery tips.
@@ -122,7 +160,9 @@ scanner-paste examples, automatic versus player-confirmed data, migration behavi
 ### Run from source
 
 ```bash
-npm install
+npm ci
+npm run typecheck
+npm test
 npm run dev
 ```
 
@@ -167,7 +207,7 @@ src/
     index.ts           App lifecycle & window
     ipc.ts             IPC handlers
     store.ts           Encrypted settings + local data persistence
-    auth/sso.ts        EVE SSO PKCE flow (loopback server, token refresh)
+    auth/sso.ts        EVE SSO PKCE flow (custom-scheme callback, token refresh)
     esi/client.ts      ESI API client (dashboard, economy, mining)
     ai/context.ts      Provider-independent Advisor character context
     ai/providers.ts    Anthropic, OpenAI, Hermes, and compatible adapters
@@ -186,8 +226,9 @@ src/
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | Launch with hot reload |
-| `npm run build` | Type-bundle all three processes into `out/` |
+| `npm run build` | Bundle all three processes into `out/` (typecheck separately) |
 | `npm run typecheck` | Type-check main+preload and renderer |
+| `npm test` | Run the Vitest suite, including credential migration regressions |
 | `npm run package` | Build a Windows NSIS installer locally (`dist/`) |
 
 ## Releasing
@@ -201,7 +242,8 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The `.github/workflows/release.yml` workflow builds the installer and attaches
+The `.github/workflows/release.yml` workflow runs typechecking and tests before building the
+installer and attaches
 `FirstMate-<version>-setup.exe` to a Release for that tag. You can also run the workflow manually
 from the **Actions** tab (it uploads the installer as a build artifact without publishing a
 release).
@@ -213,11 +255,23 @@ Building locally on Windows instead: `npm run package` → `dist/`.
 - **Installed, launches, but no window appears:** update to the latest release. If it still
   happens, send the startup log — it's written to
   `%APPDATA%\FirstMate\firstmate\startup.log` on Windows (paste the path into Explorer's address
-  bar). It records each startup step and any renderer/preload errors.
-- **"Windows protected your PC" on first run:** the installer is unsigned. Click **More info →
-  Run anyway**. Removing this prompt requires a paid code-signing certificate.
+  bar). Review/redact it before sharing; never attach settings or token files. It records startup
+  steps and renderer/preload errors.
+- **"Windows protected your PC" on first run:** installers are unsigned. Stop if you cannot
+  establish trust in the release; see the installation warning above.
+- **Secure credential storage unavailable:** unlock/configure your OS keychain and restart.
+  Existing records are retained. Do not delete credential files to clear the warning; see
+  [credential storage and recovery](docs/credential-storage.md).
 
 ## Notes & limitations
+
+- This is a desktop companion with unsigned Windows releases, not a security-certified product.
+  The renderer currently runs without Electron sandboxing, and external-window URL handling still
+  needs a scheme-allowlist hardening review. These source-review findings are not proof of an exploit.
+- OS-backed encryption does not protect against every process running as the same user. Old
+  Base64 records and older backups may still be recoverable; migration does not revoke keys.
+- `package.json` declares MIT, but a root license grant and complete third-party/CCP data notices
+  still need maintainer confirmation before redistribution terms should be treated as settled.
 
 - **Wormhole connections are not in ESI**, so the Explore tab is a manual local tracker — paste
   signatures from the in-game scanner and classify them.

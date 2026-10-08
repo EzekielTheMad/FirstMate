@@ -3,7 +3,7 @@ import { shell, BrowserWindow } from 'electron'
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose'
 import { AuthState, CharacterIdentity } from '@shared/types'
 import { ALL_SCOPES } from '@shared/scopes'
-import { getSettings, getRefreshToken, saveRefreshToken, clearRefreshToken } from '../store'
+import { getSettings, getRefreshToken, saveRefreshToken, clearRefreshToken, requireSecureStorage } from '../store'
 
 const AUTHORIZE_URL = 'https://login.eveonline.com/v2/oauth/authorize/'
 const TOKEN_URL = 'https://login.eveonline.com/v2/oauth/token'
@@ -161,6 +161,11 @@ async function exchangeToken(body: Record<string, string>): Promise<Tokens> {
  * the callback is processed (or on timeout / error).
  */
 export async function login(): Promise<AuthState> {
+  try {
+    requireSecureStorage()
+  } catch (error) {
+    return { status: 'error', error: (error as Error).message }
+  }
   const settings = getSettings()
   if (!settings.ssoClientId) {
     return { status: 'error', error: 'No SSO Client ID set. Add it in Settings first.' }
@@ -245,9 +250,10 @@ export async function handleCallbackUrl(url: string): Promise<void> {
       code_verifier: p.codeVerifier
     })
 
-    tokens = newTokens
-    identity = await identityFromAccessToken(newTokens.accessToken, p.clientId)
+    const newIdentity = await identityFromAccessToken(newTokens.accessToken, p.clientId)
     saveRefreshToken(newTokens.refreshToken)
+    tokens = newTokens
+    identity = newIdentity
 
     const s: AuthState = { status: 'logged-in', identity }
     emit(s)
@@ -284,21 +290,25 @@ export async function restoreSession(): Promise<AuthState> {
     await refreshAccessToken(refreshToken)
     return getAuthState()
   } catch {
-    clearRefreshToken()
+    // A network, keychain, or disk error is not a request to delete credentials.
+    // Keep the stored record for a retry; only explicit logout clears it.
     return { status: 'logged-out' }
   }
 }
 
 async function refreshAccessToken(refreshToken: string): Promise<void> {
+  // Check before asking EVE to rotate the token.
+  requireSecureStorage()
   const settings = getSettings()
   const newTokens = await exchangeToken({
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
     client_id: settings.ssoClientId
   })
-  tokens = newTokens
-  identity = await identityFromAccessToken(newTokens.accessToken, settings.ssoClientId)
+  const newIdentity = await identityFromAccessToken(newTokens.accessToken, settings.ssoClientId)
   saveRefreshToken(newTokens.refreshToken)
+  tokens = newTokens
+  identity = newIdentity
 }
 
 /**

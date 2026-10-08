@@ -149,9 +149,12 @@ before committing a ship.
 
 FirstMate includes its system and wormhole-type lookup in the installer, so autocomplete works
 offline. A scheduled GitHub workflow checks CCP's latest SDE build every Wednesday. When CCP's build
-number changes, it regenerates the compact lookup, runs type checking and all tests, and opens a pull
-request for review. It does not publish an app release automatically; the reviewed data ships with
-the next FirstMate release. Maintainers can also run the workflow manually after a major EVE update.
+changes, it regenerates the lookup and runs type checking plus the full test suite. It then prepares
+or reuses the reserved update branch and puts a compare link in the workflow run summary. A maintainer
+reviews that diff and manually opens a draft pull request (or uses the existing PR); repository policy
+disables Actions-created PRs. Updated data reaches users in the next FirstMate release after review.
+Maintainers can also run the workflow manually after a major EVE update. See
+[release and automation security](RELEASE_SECURITY.md) for branch safety checks and recovery steps.
 
 ## Local data and upgrades
 
